@@ -19,7 +19,7 @@ export async function createClient() {
             );
           } catch {
             // Called from a Server Component — cookies cannot be set here.
-            // The proxy.ts session refresh handles token rotation instead.
+            // proxy.ts handles token rotation instead.
           }
         },
       },

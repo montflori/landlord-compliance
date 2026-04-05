@@ -1,11 +1,74 @@
-import Link from "next/link";
-import type { Metadata } from "next";
+"use client";
 
-export const metadata: Metadata = {
-  title: "Create account – LettingCompliance",
-};
+import { useState } from "react";
+import Link from "next/link";
+import { createClient } from "@/lib/supabase/client";
 
 export default function SignupPage() {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+
+    const supabase = createClient();
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { full_name: name },
+      },
+    });
+
+    if (error) {
+      setError(error.message);
+      setLoading(false);
+      return;
+    }
+
+    setSuccess(true);
+  }
+
+  if (success) {
+    return (
+      <div className="text-center">
+        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-green-100">
+          <svg
+            className="h-6 w-6 text-green-600"
+            fill="none"
+            viewBox="0 0 24 24"
+            strokeWidth={2}
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="m4.5 12.75 6 6 9-13.5"
+            />
+          </svg>
+        </div>
+        <h2 className="text-lg font-semibold text-gray-900">Check your email</h2>
+        <p className="mt-2 text-sm text-gray-500">
+          We&apos;ve sent a confirmation link to{" "}
+          <span className="font-medium text-gray-700">{email}</span>. Click the
+          link to activate your account.
+        </p>
+        <Link
+          href="/login"
+          className="mt-6 inline-block text-sm font-medium text-indigo-600 hover:text-indigo-500"
+        >
+          Back to sign in
+        </Link>
+      </div>
+    );
+  }
+
   return (
     <>
       <div className="mb-6">
@@ -15,7 +78,13 @@ export default function SignupPage() {
         </p>
       </div>
 
-      <form className="space-y-5">
+      <form onSubmit={handleSubmit} className="space-y-5">
+        {error && (
+          <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3">
+            <p className="text-sm text-red-700">{error}</p>
+          </div>
+        )}
+
         <div>
           <label
             htmlFor="name"
@@ -30,7 +99,10 @@ export default function SignupPage() {
             autoComplete="name"
             required
             placeholder="Jane Smith"
-            className="w-full rounded-lg border border-gray-300 bg-white px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 shadow-xs transition focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            disabled={loading}
+            className="w-full rounded-lg border border-gray-300 bg-white px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 shadow-xs transition focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-500"
           />
         </div>
 
@@ -48,7 +120,10 @@ export default function SignupPage() {
             autoComplete="email"
             required
             placeholder="you@agency.co.uk"
-            className="w-full rounded-lg border border-gray-300 bg-white px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 shadow-xs transition focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            disabled={loading}
+            className="w-full rounded-lg border border-gray-300 bg-white px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 shadow-xs transition focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-500"
           />
         </div>
 
@@ -65,8 +140,12 @@ export default function SignupPage() {
             type="password"
             autoComplete="new-password"
             required
+            minLength={8}
             placeholder="••••••••"
-            className="w-full rounded-lg border border-gray-300 bg-white px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 shadow-xs transition focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            disabled={loading}
+            className="w-full rounded-lg border border-gray-300 bg-white px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 shadow-xs transition focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-500"
           />
           <p className="mt-1.5 text-xs text-gray-400">
             Must be at least 8 characters.
@@ -75,9 +154,10 @@ export default function SignupPage() {
 
         <button
           type="submit"
-          className="w-full rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-xs transition hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+          disabled={loading}
+          className="w-full rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-xs transition hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          Create account
+          {loading ? "Creating account…" : "Create account"}
         </button>
       </form>
 

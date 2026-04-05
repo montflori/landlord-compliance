@@ -1,11 +1,37 @@
-import Link from "next/link";
-import type { Metadata } from "next";
+"use client";
 
-export const metadata: Metadata = {
-  title: "Sign in – LettingCompliance",
-};
+import { useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 
 export default function LoginPage() {
+  const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+
+    const supabase = createClient();
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error) {
+      setError(error.message);
+      setLoading(false);
+      return;
+    }
+
+    router.push("/dashboard");
+  }
+
   return (
     <>
       <div className="mb-6">
@@ -15,7 +41,13 @@ export default function LoginPage() {
         </p>
       </div>
 
-      <form className="space-y-5">
+      <form onSubmit={handleSubmit} className="space-y-5">
+        {error && (
+          <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3">
+            <p className="text-sm text-red-700">{error}</p>
+          </div>
+        )}
+
         <div>
           <label
             htmlFor="email"
@@ -30,7 +62,10 @@ export default function LoginPage() {
             autoComplete="email"
             required
             placeholder="you@agency.co.uk"
-            className="w-full rounded-lg border border-gray-300 bg-white px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 shadow-xs transition focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            disabled={loading}
+            className="w-full rounded-lg border border-gray-300 bg-white px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 shadow-xs transition focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-500"
           />
         </div>
 
@@ -56,15 +91,19 @@ export default function LoginPage() {
             autoComplete="current-password"
             required
             placeholder="••••••••"
-            className="w-full rounded-lg border border-gray-300 bg-white px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 shadow-xs transition focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            disabled={loading}
+            className="w-full rounded-lg border border-gray-300 bg-white px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 shadow-xs transition focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-500"
           />
         </div>
 
         <button
           type="submit"
-          className="w-full rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-xs transition hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+          disabled={loading}
+          className="w-full rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-xs transition hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          Sign in
+          {loading ? "Signing in…" : "Sign in"}
         </button>
       </form>
 
