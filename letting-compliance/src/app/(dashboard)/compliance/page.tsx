@@ -241,8 +241,10 @@ function RecordPanel({
     setUploadError("");
 
     const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setUploadError("Not authenticated."); setUploading(false); return; }
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-    const path = `${propertyId}/${Date.now()}-${safeName}`;
+    const path = `${user.id}/${propertyId}/${Date.now()}-${safeName}`;
 
     const { error: uploadErr } = await supabase.storage
       .from(STORAGE_BUCKET)
