@@ -7,6 +7,15 @@ const nextConfig: NextConfig = {
     // lockfiles from parent directories on this machine.
     root: path.resolve(__dirname),
   },
+  async redirects() {
+    return [
+      {
+        source: "/",
+        destination: "/dashboard",
+        permanent: false,
+      },
+    ];
+  },
 };
 
 export default nextConfig;
