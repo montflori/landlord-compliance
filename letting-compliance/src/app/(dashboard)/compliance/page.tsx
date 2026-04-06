@@ -76,11 +76,6 @@ function formatDate(d: string | null) {
   });
 }
 
-function storagePathFromUrl(url: string): string | null {
-  const marker = `/object/public/${STORAGE_BUCKET}/`;
-  const idx = url.indexOf(marker);
-  return idx === -1 ? null : url.slice(idx + marker.length);
-}
 
 // ─── Status badge ─────────────────────────────────────────────────────────────
 
@@ -256,8 +251,7 @@ function RecordPanel({
       return;
     }
 
-    const { data } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(path);
-    patch({ documentUrl: data.publicUrl });
+    patch({ documentUrl: path });
     setUploading(false);
     e.target.value = "";
   }
@@ -265,11 +259,16 @@ function RecordPanel({
   async function handleRemoveFile() {
     if (!form.documentUrl) return;
     const supabase = createClient();
-    const storagePath = storagePathFromUrl(form.documentUrl);
-    if (storagePath) {
-      await supabase.storage.from(STORAGE_BUCKET).remove([storagePath]);
-    }
+    await supabase.storage.from(STORAGE_BUCKET).remove([form.documentUrl]);
     patch({ documentUrl: "" });
+  }
+
+  async function handleViewDocument() {
+    if (!form.documentUrl) return;
+    const supabase = createClient();
+    const { data, error } = await supabase.storage.from(STORAGE_BUCKET).createSignedUrl(form.documentUrl, 3600);
+    if (error || !data) return;
+    window.open(data.signedUrl, "_blank");
   }
 
   async function handleSubmit(e: React.SubmitEvent<HTMLFormElement>) {
@@ -334,9 +333,9 @@ function RecordPanel({
                 <svg className="h-4 w-4 shrink-0 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
                   <path fillRule="evenodd" d="M15.621 4.379a3 3 0 0 0-4.242 0l-7 7a3 3 0 0 0 4.241 4.243h.001l.497-.5a.75.75 0 0 1 1.064 1.057l-.498.501-.002.002a4.5 4.5 0 0 1-6.364-6.364l7-7a4.5 4.5 0 0 1 6.368 6.36l-3.455 3.553A2.625 2.625 0 1 1 9.52 9.52l3.45-3.451a.75.75 0 1 1 1.061 1.06l-3.45 3.451a1.125 1.125 0 0 0 1.587 1.595l3.454-3.553a3 3 0 0 0 0-4.242Z" clipRule="evenodd" />
                 </svg>
-                <a href={form.documentUrl} target="_blank" rel="noopener noreferrer" className="min-w-0 flex-1 truncate text-xs text-indigo-600 hover:text-indigo-500">
+                <button onClick={handleViewDocument} className="min-w-0 flex-1 truncate text-xs text-indigo-600 hover:text-indigo-500 text-left">
                   View document
-                </a>
+                </button>
                 <button type="button" onClick={handleRemoveFile} className="ml-1 shrink-0 text-gray-400 hover:text-red-500" title="Remove">
                   <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
                     <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />

@@ -33,9 +33,11 @@ type Tenant = {
 
 type PropertyDocument = {
   id: string;
+  user_id: string;
   property_id: string;
   document_type: "tenancy_agreement" | "dps" | "inventory_log";
   file_name: string;
+  file_path: string;
   file_url: string;
   uploaded_at: string;
 };
@@ -478,70 +480,83 @@ function DocumentCard({
     setUploading(true);
 
     const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { onToast({ type: "error", message: "Not authenticated." }); setUploading(false); return; }
-    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-    const path = `${user.id}/${propertyId}/${docType}/${Date.now()}-${safeName}`;
-
-    // Remove old file from storage if replacing
-    if (existing?.file_url) {
-      const oldPath = storagePathFromUrl(existing.file_url);
-      if (oldPath) {
-        await supabase.storage.from(STORAGE_BUCKET).remove([oldPath]);
-      }
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      console.error("[upload] auth error:", authError);
+      onToast({ type: "error", message: "Not authenticated." });
+      setUploading(false);
+      return;
     }
+
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const filePath = `${user.id}/${propertyId}/${docType}/${safeName}`;
+
+    console.log("[upload] user.id:", user.id);
+    console.log("[upload] propertyId:", propertyId);
+    console.log("[upload] docType:", docType);
+    console.log("[upload] filePath:", filePath);
 
     const { error: uploadError } = await supabase.storage
       .from(STORAGE_BUCKET)
-      .upload(path, file, { upsert: false });
+      .upload(filePath, file, { upsert: true });
 
     if (uploadError) {
+      console.error("[upload] storage error:", uploadError);
       onToast({ type: "error", message: uploadError.message });
       setUploading(false);
       e.target.value = "";
       return;
     }
 
-    const { data: urlData } = supabase.storage
-      .from(STORAGE_BUCKET)
-      .getPublicUrl(path);
+    console.log("[upload] storage upload succeeded");
 
-    // Upsert metadata into property_documents
-    const { data: doc, error: dbError } = existing
-      ? await supabase
-          .from("property_documents")
-          .update({
-            file_name: file.name,
-            file_url: urlData.publicUrl,
-            uploaded_at: new Date().toISOString(),
-          })
-          .eq("id", existing.id)
-          .select()
-          .single()
-      : await supabase
-          .from("property_documents")
-          .insert({
-            property_id: propertyId,
-            document_type: docType,
-            file_name: file.name,
-            file_url: urlData.publicUrl,
-          })
-          .select()
-          .single();
-
-    setUploading(false);
-    e.target.value = "";
+    const { data: doc, error: dbError } = await supabase
+      .from("property_documents")
+      .upsert(
+        {
+          user_id: user.id,
+          property_id: propertyId,
+          document_type: docType,
+          file_name: file.name,
+          file_path: filePath,
+          file_url: filePath,
+        },
+        { onConflict: "property_id,document_type" }
+      )
+      .select()
+      .single();
 
     if (dbError) {
+      console.error("[upload] db upsert error:", dbError);
       onToast({ type: "error", message: dbError.message });
+      setUploading(false);
+      e.target.value = "";
       return;
     }
 
+    console.log("[upload] db upsert succeeded:", doc);
+    setUploading(false);
+    e.target.value = "";
     onUploaded(doc);
     onToast({
       type: "success",
       message: `${label} ${existing ? "replaced" : "uploaded"}.`,
     });
+  }
+
+  async function handleView() {
+    if (!existing) return;
+    const storagePath = existing.file_path || existing.file_url;
+    console.log("[view] generating signed URL for:", storagePath);
+    const supabase = createClient();
+    const { data, error } = await supabase.storage.from(STORAGE_BUCKET).createSignedUrl(storagePath, 3600);
+    if (error || !data) {
+      console.error("[view] signed URL error:", error);
+      onToast({ type: "error", message: "Could not generate download link." });
+      return;
+    }
+    console.log("[view] signed URL generated successfully");
+    window.open(data.signedUrl, "_blank");
   }
 
   return (
@@ -550,10 +565,8 @@ function DocumentCard({
         <p className="text-sm font-medium text-gray-900">{label}</p>
         <p className="mt-0.5 text-xs text-gray-500">{description}</p>
         {existing ? (
-          <a
-            href={existing.file_url}
-            target="_blank"
-            rel="noopener noreferrer"
+          <button
+            onClick={handleView}
             className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-indigo-600 hover:text-indigo-500"
           >
             <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
@@ -561,7 +574,7 @@ function DocumentCard({
               <path d="M11.603 7.963a.75.75 0 0 0-.977 1.138 2.5 2.5 0 0 1 .142 3.667l-3 3a2.5 2.5 0 0 1-3.536-3.536l1.225-1.224a.75.75 0 0 0-1.061-1.06l-1.224 1.224a4 4 0 1 0 5.656 5.656l3-3a4 4 0 0 0-.225-5.865Z" />
             </svg>
             {existing.file_name}
-          </a>
+          </button>
         ) : (
           <p className="mt-2 text-xs text-gray-400">No document uploaded</p>
         )}
@@ -661,11 +674,6 @@ function formatDate(d: string | null) {
   });
 }
 
-function storagePathFromUrl(url: string): string | null {
-  const marker = `/object/public/${STORAGE_BUCKET}/`;
-  const idx = url.indexOf(marker);
-  return idx === -1 ? null : url.slice(idx + marker.length);
-}
 
 function Field({
   label,

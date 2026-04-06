@@ -35,9 +35,11 @@ type Tenant = {
 
 type PropertyDocument = {
   id: string;
+  user_id: string;
   property_id: string;
   document_type: "tenancy_agreement" | "dps" | "inventory_log";
   file_name: string;
+  file_path: string;
   file_url: string;
   uploaded_at: string;
 };
@@ -73,11 +75,6 @@ function formatDate(d: string | null) {
   return new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 }
 
-function storagePathFromUrl(url: string): string | null {
-  const marker = `/object/public/${STORAGE_BUCKET}/`;
-  const idx = url.indexOf(marker);
-  return idx === -1 ? null : url.slice(idx + marker.length);
-}
 
 // ─── Toast ────────────────────────────────────────────────────────────────────
 
@@ -325,7 +322,7 @@ function PropertyDetailsSection({ property }: { property: Property }) {
 
 // ─── Tenant section ───────────────────────────────────────────────────────────
 
-function TenantSection({ propertyId, onToast }: { propertyId: string; onToast: (t: Toast) => void }) {
+function TenantSection({ propertyId, onToast, onSaved }: { propertyId: string; onToast: (t: Toast) => void; onSaved?: () => void }) {
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -388,6 +385,7 @@ function TenantSection({ propertyId, onToast }: { propertyId: string; onToast: (
     setTenant(data);
     setEditing(false);
     onToast({ type: "success", message: "Tenant information saved." });
+    onSaved?.();
   }
 
   function handleCancel() {
@@ -514,35 +512,82 @@ function DocumentCard({ propertyId, docType, label, description, existing, onUpl
     const file = e.target.files?.[0];
     if (!file) return;
     setUploading(true);
-    const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { onToast({ type: "error", message: "Not authenticated." }); setUploading(false); return; }
-    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-    const path = `${user.id}/${propertyId}/${docType}/${Date.now()}-${safeName}`;
 
-    if (existing?.file_url) {
-      const oldPath = storagePathFromUrl(existing.file_url);
-      if (oldPath) await supabase.storage.from(STORAGE_BUCKET).remove([oldPath]);
+    const supabase = createClient();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      console.error("[upload] auth error:", authError);
+      onToast({ type: "error", message: "Not authenticated." });
+      setUploading(false);
+      return;
     }
 
-    const { error: uploadError } = await supabase.storage.from(STORAGE_BUCKET).upload(path, file, { upsert: false });
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const filePath = `${user.id}/${propertyId}/${docType}/${safeName}`;
+
+    console.log("[upload] user.id:", user.id);
+    console.log("[upload] propertyId:", propertyId);
+    console.log("[upload] docType:", docType);
+    console.log("[upload] filePath:", filePath);
+
+    const { error: uploadError } = await supabase.storage
+      .from(STORAGE_BUCKET)
+      .upload(filePath, file, { upsert: true });
+
     if (uploadError) {
+      console.error("[upload] storage error:", uploadError);
       onToast({ type: "error", message: uploadError.message });
       setUploading(false);
       e.target.value = "";
       return;
     }
 
-    const { data: urlData } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(path);
-    const { data: doc, error: dbError } = existing
-      ? await supabase.from("property_documents").update({ file_name: file.name, file_url: urlData.publicUrl, uploaded_at: new Date().toISOString() }).eq("id", existing.id).select().single()
-      : await supabase.from("property_documents").insert({ property_id: propertyId, document_type: docType, file_name: file.name, file_url: urlData.publicUrl }).select().single();
+    console.log("[upload] storage upload succeeded");
 
+    const { data: doc, error: dbError } = await supabase
+      .from("property_documents")
+      .upsert(
+        {
+          user_id: user.id,
+          property_id: propertyId,
+          document_type: docType,
+          file_name: file.name,
+          file_path: filePath,
+          file_url: filePath,
+        },
+        { onConflict: "property_id,document_type" }
+      )
+      .select()
+      .single();
+
+    if (dbError) {
+      console.error("[upload] db upsert error:", dbError);
+      onToast({ type: "error", message: dbError.message });
+      setUploading(false);
+      e.target.value = "";
+      return;
+    }
+
+    console.log("[upload] db upsert succeeded:", doc);
     setUploading(false);
     e.target.value = "";
-    if (dbError) { onToast({ type: "error", message: dbError.message }); return; }
     onUploaded(doc);
     onToast({ type: "success", message: `${label} ${existing ? "replaced" : "uploaded"}.` });
+  }
+
+  async function handleView() {
+    if (!existing) return;
+    const storagePath = existing.file_path || existing.file_url;
+    console.log("[view] generating signed URL for:", storagePath);
+    const supabase = createClient();
+    const { data, error } = await supabase.storage.from(STORAGE_BUCKET).createSignedUrl(storagePath, 3600);
+    if (error || !data) {
+      console.error("[view] signed URL error:", error);
+      onToast({ type: "error", message: "Could not generate download link." });
+      return;
+    }
+    console.log("[view] signed URL generated successfully");
+    window.open(data.signedUrl, "_blank");
   }
 
   return (
@@ -551,14 +596,14 @@ function DocumentCard({ propertyId, docType, label, description, existing, onUpl
         <p className="text-sm font-medium text-gray-900">{label}</p>
         <p className="mt-0.5 text-xs text-gray-500">{description}</p>
         {existing ? (
-          <a href={existing.file_url} target="_blank" rel="noopener noreferrer"
+          <button onClick={handleView}
             className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-indigo-600 hover:text-indigo-500">
             <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
               <path d="M12.232 4.232a2.5 2.5 0 0 1 3.536 3.536l-1.225 1.224a.75.75 0 0 0 1.061 1.06l1.224-1.224a4 4 0 0 0-5.656-5.656l-3 3a4 4 0 0 0 .225 5.865.75.75 0 0 0 .977-1.138 2.5 2.5 0 0 1-.142-3.667l3-3Z" />
               <path d="M11.603 7.963a.75.75 0 0 0-.977 1.138 2.5 2.5 0 0 1 .142 3.667l-3 3a2.5 2.5 0 0 1-3.536-3.536l1.225-1.224a.75.75 0 0 0-1.061-1.06l-1.224 1.224a4 4 0 1 0 5.656 5.656l3-3a4 4 0 0 0-.225-5.865Z" />
             </svg>
             {existing.file_name}
-          </a>
+          </button>
         ) : (
           <p className="mt-2 text-xs text-gray-400">No document uploaded</p>
         )}
@@ -664,6 +709,15 @@ export default function PropertiesPage() {
 
   const selectedProperty = properties.find((p) => p.id === selectedId) ?? null;
 
+  async function refreshPropertyStatus(id: string) {
+    const supabase = createClient();
+    const { data } = await supabase.from("properties").select("occupancy_status").eq("id", id).single();
+    if (!data) return;
+    setProperties((prev) =>
+      prev.map((p) => p.id === id ? { ...p, occupancy_status: data.occupancy_status } : p)
+    );
+  }
+
   async function handleDeleteConfirm() {
     if (!deletingProperty) return;
     setDeleteLoading(true);
@@ -767,7 +821,10 @@ export default function PropertiesPage() {
           {/* Selected property header */}
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">{selectedProperty.address_line_1}</h2>
+              <div className="flex items-center gap-2.5">
+                <h2 className="text-lg font-semibold text-gray-900">{selectedProperty.address_line_1}</h2>
+                <OccupancyBadge status={selectedProperty.occupancy_status} />
+              </div>
               <p className="mt-0.5 text-sm text-gray-500">
                 {[selectedProperty.address_line_2, selectedProperty.city, selectedProperty.postcode].filter(Boolean).join(", ")}
               </p>
@@ -785,7 +842,7 @@ export default function PropertiesPage() {
           </div>
 
           <PropertyDetailsSection property={selectedProperty} />
-          <TenantSection propertyId={selectedProperty.id} onToast={setToast} />
+          <TenantSection propertyId={selectedProperty.id} onToast={setToast} onSaved={() => refreshPropertyStatus(selectedProperty.id)} />
           <DocumentsSection propertyId={selectedProperty.id} onToast={setToast} />
         </div>
       )}
