@@ -572,8 +572,8 @@ export default function CompliancePage() {
               </p>
             </div>
           ) : (
-            <div className="rounded-xl border border-gray-200 bg-white">
-              <table className="w-full text-sm">
+            <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+              <table className="w-full min-w-[640px] text-sm">
                 <thead>
                   <tr className="border-b border-gray-200 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
                     <th className="px-6 py-3">Compliance type</th>

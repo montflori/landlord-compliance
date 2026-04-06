@@ -85,7 +85,7 @@ function buildEmailHtml(reminder: PendingReminder): string {
           <tr>
             <td style="background:#4f46e5;padding:28px 32px;">
               <p style="margin:0;color:#e0e7ff;font-size:13px;font-weight:500;letter-spacing:0.05em;text-transform:uppercase;">
-                Letting Compliance
+                Lucid Let
               </p>
               <h1 style="margin:8px 0 0;color:#ffffff;font-size:22px;font-weight:600;line-height:1.3;">
                 Compliance reminder

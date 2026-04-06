@@ -14,7 +14,7 @@ export default function LoginPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [loading, setLoading] = useState(false);
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: React.SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     setErrorMessage("");
     setLoading(true);
@@ -30,8 +30,8 @@ export default function LoginPage() {
       return;
     }
 
-    router.push("/dashboard");
     router.refresh();
+    router.push("/dashboard");
   }
 
   return (

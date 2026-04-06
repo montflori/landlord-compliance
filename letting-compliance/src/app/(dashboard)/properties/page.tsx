@@ -111,21 +111,86 @@ function CompliancePill({ stat }: { stat: ComplianceStat | undefined }) {
   );
 }
 
+// ─── Delete confirm modal ─────────────────────────────────────────────────────
+
+function DeleteConfirmModal({
+  property,
+  onConfirm,
+  onCancel,
+  loading,
+}: {
+  property: Property;
+  onConfirm: () => void;
+  onCancel: () => void;
+  loading: boolean;
+}) {
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onCancel();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onCancel]);
+
+  return (
+    <div className="fixed inset-0 z-40 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onCancel} />
+      <div className="relative z-10 w-full max-w-sm rounded-xl border border-gray-200 bg-white p-6 shadow-xl">
+        <div className="mb-1 flex items-center gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-100">
+            <svg className="h-5 w-5 text-red-600" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495ZM10 5a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 10 5Zm0 9a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" clipRule="evenodd" />
+            </svg>
+          </div>
+          <div>
+            <h2 className="text-sm font-semibold text-gray-900">Delete property</h2>
+            <p className="text-sm text-gray-500">This action cannot be undone.</p>
+          </div>
+        </div>
+        <p className="mt-4 text-sm text-gray-600">
+          Are you sure you want to delete{" "}
+          <span className="font-medium text-gray-900">{property.address_line_1}</span>?
+        </p>
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={loading}
+            className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-60"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={loading}
+            className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {loading ? "Deleting…" : "Delete"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Property row ─────────────────────────────────────────────────────────────
 
 function PropertyRow({
   property,
   stat,
+  onDelete,
 }: {
   property: Property;
   stat: ComplianceStat | undefined;
+  onDelete: () => void;
 }) {
   const landlord = Array.isArray(property.landlords)
     ? property.landlords[0]
     : property.landlords;
 
   return (
-    <div className="flex items-center gap-6 px-6 py-4 hover:bg-gray-50">
+    <div className="group flex items-center gap-6 px-6 py-4 hover:bg-gray-50">
       {/* Address */}
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
@@ -165,6 +230,13 @@ function PropertyRow({
         >
           Requirements
         </Link>
+        <button
+          type="button"
+          onClick={onDelete}
+          className="text-sm font-medium text-red-600 opacity-0 transition-opacity hover:text-red-500 group-hover:opacity-100"
+        >
+          Delete
+        </button>
       </div>
     </div>
   );
@@ -420,6 +492,8 @@ export default function PropertiesPage() {
   const [landlords, setLandlords] = useState<Landlord[]>([]);
   const [complianceStats, setComplianceStats] = useState<Map<string, ComplianceStat>>(new Map());
   const [showPanel, setShowPanel] = useState(false);
+  const [deletingProperty, setDeletingProperty] = useState<Property | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [fetchError, setFetchError] = useState("");
   const [toast, setToast] = useState<Toast | null>(null);
@@ -494,9 +568,33 @@ export default function PropertiesPage() {
     fetchData();
   }, [refreshKey]);
 
+  async function handleDeleteConfirm() {
+    if (!deletingProperty) return;
+    setDeleteLoading(true);
+
+    const supabase = createClient();
+    const { error } = await supabase.from("properties").delete().eq("id", deletingProperty.id);
+
+    setDeleteLoading(false);
+    setDeletingProperty(null);
+
+    if (error) { setToast({ type: "error", message: error.message }); return; }
+    setToast({ type: "success", message: "Property deleted." });
+    setRefreshKey((k) => k + 1);
+  }
+
   return (
     <div className="p-8">
       {toast && <ToastBanner toast={toast} onDismiss={() => setToast(null)} />}
+
+      {deletingProperty && (
+        <DeleteConfirmModal
+          property={deletingProperty}
+          onConfirm={handleDeleteConfirm}
+          onCancel={() => setDeletingProperty(null)}
+          loading={deleteLoading}
+        />
+      )}
 
       {showPanel && (
         <AddPropertyPanel
@@ -561,6 +659,7 @@ export default function PropertiesPage() {
                 <PropertyRow
                   property={property}
                   stat={complianceStats.get(property.id)}
+                  onDelete={() => setDeletingProperty(property)}
                 />
               </li>
             ))}

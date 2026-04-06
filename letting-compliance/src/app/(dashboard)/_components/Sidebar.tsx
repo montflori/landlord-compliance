@@ -66,9 +66,7 @@ export default function Sidebar() {
   return (
     <aside className="flex h-full w-60 flex-col border-r border-gray-200 bg-white px-3 py-4">
       <div className="mb-6 px-3">
-        <span className="text-lg font-semibold text-indigo-600">
-          LettingCompliance
-        </span>
+        <img src="/lucid-let-logo.svg" alt="Lucid Let" className="h-10 w-auto" />
       </div>
 
       <nav className="flex flex-1 flex-col gap-1">

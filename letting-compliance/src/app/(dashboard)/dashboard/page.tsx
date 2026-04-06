@@ -206,13 +206,13 @@ export default async function DashboardPage() {
           <h2 className="mb-4 text-sm font-semibold text-gray-900">
             Recent properties
           </h2>
-          <div className="rounded-xl border border-gray-200 bg-white">
+          <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
             {!recentProperties || recentProperties.length === 0 ? (
               <div className="flex items-center justify-center py-12 text-sm text-gray-400">
                 No properties yet.
               </div>
             ) : (
-              <table className="w-full text-sm">
+              <table className="w-full min-w-[480px] text-sm">
                 <thead>
                   <tr className="border-b border-gray-200 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
                     <th className="px-5 py-3">Address</th>
@@ -258,13 +258,13 @@ export default async function DashboardPage() {
           <h2 className="mb-4 text-sm font-semibold text-gray-900">
             Recent missing compliance items
           </h2>
-          <div className="rounded-xl border border-gray-200 bg-white">
+          <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
             {recentMissing.length === 0 ? (
               <div className="flex items-center justify-center py-12 text-sm text-gray-400">
                 All required items are covered.
               </div>
             ) : (
-              <table className="w-full text-sm">
+              <table className="w-full min-w-[360px] text-sm">
                 <thead>
                   <tr className="border-b border-gray-200 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
                     <th className="px-5 py-3">Property</th>
