@@ -125,11 +125,11 @@ function SectionCard({
 }) {
   return (
     <div className="rounded-xl border border-gray-200 bg-white shadow-xs">
-      <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
+      <div className="flex items-center justify-between border-b border-gray-100 px-4 py-4 sm:px-6">
         <h2 className="text-sm font-semibold text-gray-900">{title}</h2>
         {action}
       </div>
-      <div className="px-6 py-5">{children}</div>
+      <div className="px-4 py-4 sm:px-6 sm:py-5">{children}</div>
     </div>
   );
 }
@@ -769,7 +769,7 @@ export default function PropertyDetailPage({
       )}
 
       {/* Page header */}
-      <div className="border-b border-gray-200 bg-white px-8 py-6">
+      <div className="border-b border-gray-200 bg-white px-4 py-5 sm:px-8 sm:py-6">
         <Link
           href="/properties"
           className="mb-4 inline-flex items-center gap-1.5 text-xs font-medium text-gray-400 hover:text-gray-600 transition-colors"
@@ -815,7 +815,7 @@ export default function PropertyDetailPage({
       </div>
 
       {/* Sections */}
-      <div className="p-8 space-y-6">
+      <div className="p-4 sm:p-8 space-y-5 sm:space-y-6">
         <TenantSection propertyId={id} onToast={setToast} />
         <DocumentsSection propertyId={id} onToast={setToast} />
       </div>

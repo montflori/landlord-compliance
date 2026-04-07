@@ -54,7 +54,7 @@ const navItems = [
   },
 ];
 
-export default function Sidebar() {
+export default function Sidebar({ onClose }: { onClose?: () => void } = {}) {
   const pathname = usePathname();
   const router = useRouter();
   const [email, setEmail] = useState<string | null>(null);
@@ -83,17 +83,31 @@ export default function Sidebar() {
 
   return (
     <aside className="flex h-full w-[220px] flex-col bg-slate-900 px-3 py-5">
-      {/* Logo */}
-      <div className="mb-7 px-2 flex items-center gap-2.5">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white overflow-hidden">
-          <img src="/let-lucid-logo.png" alt="Let Lucid" className="h-7 w-7 object-contain" />
+      {/* Logo row — close button shown in mobile drawer mode */}
+      <div className="mb-7 flex items-center justify-between px-2">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white overflow-hidden">
+            <img src="/let-lucid-logo.png" alt="Let Lucid" className="h-7 w-7 object-contain" />
+          </div>
+          <span
+            style={{ fontFamily: "var(--font-bebas)" }}
+            className="text-[22px] tracking-widest leading-none text-white"
+          >
+            LET LUCID
+          </span>
         </div>
-        <span
-          style={{ fontFamily: "var(--font-bebas)" }}
-          className="text-[22px] tracking-widest leading-none text-white"
-        >
-          LET LUCID
-        </span>
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-1 text-slate-400 hover:bg-white/10 hover:text-white transition-colors"
+            aria-label="Close navigation"
+          >
+            <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+              <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
+            </svg>
+          </button>
+        )}
       </div>
 
       {/* Nav label */}
@@ -113,7 +127,7 @@ export default function Sidebar() {
             <Link
               key={item.href}
               href={item.href}
-              className={`group relative flex items-center gap-3 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors ${
+              className={`group relative flex items-center gap-3 rounded-lg px-2.5 py-2.5 text-sm font-medium transition-colors ${
                 isActive
                   ? "bg-white/10 text-white"
                   : "text-slate-400 hover:bg-white/5 hover:text-slate-200"
@@ -145,7 +159,7 @@ export default function Sidebar() {
         </div>
         <button
           onClick={handleLogout}
-          className="mt-1 flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-sm font-medium text-slate-500 transition-colors hover:bg-white/5 hover:text-slate-300"
+          className="mt-1 flex w-full items-center gap-3 rounded-lg px-2.5 py-2.5 text-sm font-medium text-slate-500 transition-colors hover:bg-white/5 hover:text-slate-300"
         >
           <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15M12 9l-3 3m0 0 3 3m-3-3h12.75" />

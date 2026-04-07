@@ -247,9 +247,12 @@ function AddLandlordPanel({
   return (
     <>
       <div className="fixed inset-0 z-30 bg-black/20 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed inset-y-0 right-0 z-40 flex w-full max-w-md flex-col border-l border-gray-200 bg-white shadow-xl">
-        <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
-          <h2 className="text-base font-semibold text-gray-900">Add landlord</h2>
+      <div className="fixed inset-y-0 right-0 z-40 flex w-full sm:max-w-md flex-col bg-white shadow-2xl ring-1 ring-black/5">
+        <div className="flex items-center justify-between border-b border-gray-100 px-6 py-5">
+          <div>
+            <h2 className="text-base font-semibold text-gray-900">Add landlord</h2>
+            <p className="mt-0.5 text-xs text-gray-400">Fill in the details below.</p>
+          </div>
           <button type="button" onClick={onClose} className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
             <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
               <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
@@ -321,8 +324,8 @@ function LandlordRow({
         {landlord.property_count} {landlord.property_count === 1 ? "property" : "properties"}
       </span>
 
-      {/* Actions */}
-      <div className="relative z-10 flex shrink-0 items-center gap-3 opacity-0 transition-opacity group-hover:opacity-100">
+      {/* Actions — always visible on mobile, hover-reveal on desktop */}
+      <div className="relative z-10 flex shrink-0 items-center gap-3 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">
         <button
           type="button"
           onClick={(e) => { e.preventDefault(); onEdit(); }}
@@ -412,7 +415,7 @@ export default function LandlordsPage() {
   }
 
   return (
-    <div className="p-8">
+    <div className="flex flex-col min-h-full">
       {toast && <ToastBanner toast={toast} onDismiss={() => setToast(null)} />}
 
       {showPanel && (
@@ -448,22 +451,29 @@ export default function LandlordsPage() {
       )}
 
       {/* Page header */}
-      <div className="mb-6 flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Landlords</h1>
-          <p className="mt-1 text-sm text-gray-500">Manage your landlord portfolio</p>
+      <div className="border-b border-gray-200 bg-white px-4 py-5 sm:px-8 sm:py-6">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h1 className="text-xl font-semibold tracking-tight text-gray-900">Landlords</h1>
+            <p className="mt-0.5 text-sm text-gray-500">
+              {landlords.length > 0 ? `${landlords.length} landlord${landlords.length === 1 ? "" : "s"}` : "Manage your landlord portfolio"}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowPanel(true)}
+            className="flex shrink-0 items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-700"
+          >
+            <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+              <path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />
+            </svg>
+            <span className="hidden sm:inline">Add landlord</span>
+            <span className="sm:hidden">Add</span>
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={() => setShowPanel(true)}
-          className="flex shrink-0 items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700"
-        >
-          <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-            <path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />
-          </svg>
-          Add landlord
-        </button>
       </div>
+
+      <div className="p-4 sm:p-8">
 
       {/* Search */}
       <div className="mb-4 relative">
@@ -514,6 +524,7 @@ export default function LandlordsPage() {
           </ul>
         )}
       </div>
+      </div> {/* end p-4 sm:p-8 */}
     </div>
   );
 }

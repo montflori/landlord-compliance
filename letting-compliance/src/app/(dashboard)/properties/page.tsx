@@ -197,7 +197,7 @@ function AddPropertyPanel({ landlords, onAdded, onClose }: {
   return (
     <>
       <div className="fixed inset-0 z-30 bg-black/20 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed inset-y-0 right-0 z-40 flex w-full max-w-md flex-col bg-white shadow-2xl ring-1 ring-black/5">
+      <div className="fixed inset-y-0 right-0 z-40 flex w-full sm:max-w-md flex-col bg-white shadow-2xl ring-1 ring-black/5">
         <div className="flex items-center justify-between border-b border-gray-100 px-6 py-5">
           <div>
             <h2 className="text-base font-semibold text-gray-900">Add property</h2>
@@ -748,7 +748,7 @@ export default function PropertiesPage() {
   }
 
   return (
-    <div className="flex flex-col min-h-full p-8">
+    <div className="flex flex-col min-h-full p-4 sm:p-8">
       {toast && <ToastBanner toast={toast} onDismiss={() => setToast(null)} />}
 
       {deletingProperty && (
@@ -763,7 +763,7 @@ export default function PropertiesPage() {
       )}
 
       {/* ── Header ── */}
-      <div className="border-b border-gray-200 bg-white px-8 py-6 -mx-8 -mt-8 mb-8">
+      <div className="border-b border-gray-200 bg-white px-4 py-5 sm:px-8 sm:py-6 -mx-4 sm:-mx-8 -mt-0 mb-6 sm:mb-8">
         <div className="flex items-end justify-between gap-4">
           <div>
             <h1 className="text-xl font-semibold tracking-tight text-gray-900">Properties</h1>

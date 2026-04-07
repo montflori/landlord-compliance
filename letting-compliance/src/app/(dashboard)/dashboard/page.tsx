@@ -196,7 +196,7 @@ export default async function DashboardPage() {
   return (
     <div className="flex flex-col min-h-full">
       {/* Page header */}
-      <div className="border-b border-gray-200 bg-white px-8 py-6">
+      <div className="border-b border-gray-200 bg-white px-4 py-5 sm:px-8 sm:py-6">
         <div className="flex items-end justify-between">
           <div>
             <h1 className="text-xl font-semibold tracking-tight text-gray-900">Dashboard</h1>
@@ -220,7 +220,7 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      <div className="flex-1 p-8 space-y-8">
+      <div className="flex-1 p-4 sm:p-8 space-y-6 sm:space-y-8">
         {/* Stat cards */}
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           {stats.map((stat) => (
@@ -326,43 +326,47 @@ export default async function DashboardPage() {
                   </Link>
                 </div>
               ) : (
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-gray-100 bg-gray-50/60">
-                      <th className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">Address</th>
-                      <th className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">Landlord</th>
-                      <th className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">Added</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {recentProperties.map((property) => {
-                      const landlord = Array.isArray(property.landlords)
-                        ? property.landlords[0]
-                        : property.landlords;
-                      return (
-                        <tr key={property.id} className="hover:bg-gray-50/60 transition-colors">
-                          <td className="px-5 py-3.5">
-                            <Link
-                              href={`/properties/${property.id}`}
-                              className="font-medium text-gray-900 hover:text-indigo-600"
-                            >
-                              {property.address_line_1}
-                            </Link>
-                            <p className="text-xs text-gray-400 mt-0.5">
-                              {property.city}, {property.postcode}
-                            </p>
-                          </td>
-                          <td className="px-5 py-3.5 text-gray-500">
-                            {landlord?.full_name ?? "—"}
-                          </td>
-                          <td className="px-5 py-3.5 text-gray-400 tabular-nums">
-                            {formatDate(property.created_at)}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                <>
+                  {/* Desktop table */}
+                  <table className="hidden sm:table w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-100 bg-gray-50/60">
+                        <th className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">Address</th>
+                        <th className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">Landlord</th>
+                        <th className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">Added</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {recentProperties.map((property) => {
+                        const landlord = Array.isArray(property.landlords) ? property.landlords[0] : property.landlords;
+                        return (
+                          <tr key={property.id} className="hover:bg-gray-50/60 transition-colors">
+                            <td className="px-5 py-3.5">
+                              <Link href={`/properties/${property.id}`} className="font-medium text-gray-900 hover:text-indigo-600">{property.address_line_1}</Link>
+                              <p className="text-xs text-gray-400 mt-0.5">{property.city}, {property.postcode}</p>
+                            </td>
+                            <td className="px-5 py-3.5 text-gray-500">{landlord?.full_name ?? "—"}</td>
+                            <td className="px-5 py-3.5 text-gray-400 tabular-nums">{formatDate(property.created_at)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  {/* Mobile card list */}
+                  <div className="sm:hidden divide-y divide-gray-100">
+                    {recentProperties.map((property) => (
+                        <Link key={property.id} href={`/properties/${property.id}`} className="flex items-center justify-between px-4 py-3.5 hover:bg-gray-50">
+                          <div className="min-w-0">
+                            <p className="font-medium text-gray-900 truncate">{property.address_line_1}</p>
+                            <p className="text-xs text-gray-400 mt-0.5">{property.city}, {property.postcode}</p>
+                          </div>
+                          <svg className="h-4 w-4 shrink-0 text-gray-300 ml-3" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M8.22 5.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L11.94 10 8.22 6.28a.75.75 0 0 1 0-1.06Z" clipRule="evenodd" />
+                          </svg>
+                        </Link>
+                    ))}
+                  </div>
+                </>
               )}
             </div>
           </div>
@@ -392,42 +396,48 @@ export default async function DashboardPage() {
                   <p className="text-xs text-gray-400">All required compliance items are on file</p>
                 </div>
               ) : (
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-gray-100 bg-gray-50/60">
-                      <th className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">Property</th>
-                      <th className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">Missing item</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {recentMissing.map((item) => (
-                      <tr key={item.id} className="hover:bg-gray-50/60 transition-colors">
-                        <td className="px-5 py-3.5">
-                          {item.address_line_1 ? (
-                            <>
-                              <Link
-                                href={`/properties/${item.property_id}`}
-                                className="font-medium text-gray-900 hover:text-indigo-600"
-                              >
-                                {item.address_line_1}
-                              </Link>
-                              <p className="text-xs text-gray-400 mt-0.5">
-                                {item.city}, {item.postcode}
-                              </p>
-                            </>
-                          ) : (
-                            <span className="text-gray-400">—</span>
-                          )}
-                        </td>
-                        <td className="px-5 py-3.5">
-                          <span className="inline-flex items-center rounded-md bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700 ring-1 ring-inset ring-red-600/20">
-                            {item.missing_item_name || "—"}
-                          </span>
-                        </td>
+                <>
+                  {/* Desktop table */}
+                  <table className="hidden sm:table w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-100 bg-gray-50/60">
+                        <th className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">Property</th>
+                        <th className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">Missing item</th>
                       </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {recentMissing.map((item) => (
+                        <tr key={item.id} className="hover:bg-gray-50/60 transition-colors">
+                          <td className="px-5 py-3.5">
+                            {item.address_line_1 ? (
+                              <>
+                                <Link href={`/properties/${item.property_id}`} className="font-medium text-gray-900 hover:text-indigo-600">{item.address_line_1}</Link>
+                                <p className="text-xs text-gray-400 mt-0.5">{item.city}, {item.postcode}</p>
+                              </>
+                            ) : <span className="text-gray-400">—</span>}
+                          </td>
+                          <td className="px-5 py-3.5">
+                            <span className="inline-flex items-center rounded-md bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700 ring-1 ring-inset ring-red-600/20">{item.missing_item_name || "—"}</span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {/* Mobile card list */}
+                  <div className="sm:hidden divide-y divide-gray-100">
+                    {recentMissing.map((item) => (
+                      <Link key={item.id} href={`/properties/${item.property_id}`} className="flex items-center justify-between px-4 py-3.5 hover:bg-gray-50">
+                        <div className="min-w-0">
+                          <p className="font-medium text-gray-900 truncate">{item.address_line_1 || "—"}</p>
+                          <span className="mt-1 inline-flex items-center rounded-md bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700 ring-1 ring-inset ring-red-600/20">{item.missing_item_name || "—"}</span>
+                        </div>
+                        <svg className="h-4 w-4 shrink-0 text-gray-300 ml-3" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M8.22 5.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L11.94 10 8.22 6.28a.75.75 0 0 1 0-1.06Z" clipRule="evenodd" />
+                        </svg>
+                      </Link>
                     ))}
-                  </tbody>
-                </table>
+                  </div>
+                </>
               )}
             </div>
           </div>

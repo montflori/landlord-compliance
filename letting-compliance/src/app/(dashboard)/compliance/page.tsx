@@ -300,9 +300,9 @@ function RecordPanel({
   return (
     <>
       <div className="fixed inset-0 z-30 bg-black/20 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed inset-y-0 right-0 z-40 flex w-full max-w-md flex-col border-l border-gray-200 bg-white shadow-xl">
+      <div className="fixed inset-y-0 right-0 z-40 flex w-full sm:max-w-md flex-col bg-white shadow-2xl ring-1 ring-black/5">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+        <div className="flex items-center justify-between border-b border-gray-100 px-6 py-5">
           <div>
             <h2 className="text-base font-semibold text-gray-900">
               {isEdit ? "Edit record" : "Add record"}
@@ -487,7 +487,7 @@ export default function CompliancePage() {
   const selectedProperty = properties.find((p) => p.id === selectedPropertyId);
 
   return (
-    <div className="p-8">
+    <div className="flex flex-col min-h-full">
       {toast && <ToastBanner toast={toast} onDismiss={() => setToast(null)} />}
 
       {panel && (
@@ -512,23 +512,23 @@ export default function CompliancePage() {
       )}
 
       {/* Page header */}
-      <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-gray-900">Compliance</h1>
-        <p className="mt-1 text-sm text-gray-500">
-          Track certificates and regulatory requirements per property
-        </p>
+      <div className="border-b border-gray-200 bg-white px-4 py-5 sm:px-8 sm:py-6">
+        <h1 className="text-xl font-semibold tracking-tight text-gray-900">Compliance</h1>
+        <p className="mt-0.5 text-sm text-gray-500">Track certificates and regulatory requirements per property</p>
       </div>
+
+      <div className="p-4 sm:p-8">
 
       {/* Property selector */}
       <div className="mb-6">
         <label htmlFor="property_select" className="block text-sm font-medium text-gray-700 mb-1.5">
-          Property
+          Select property
         </label>
         <select
           id="property_select"
           value={selectedPropertyId}
           onChange={(e) => setSelectedPropertyId(e.target.value)}
-          className="w-full max-w-sm rounded-lg border border-gray-300 bg-white px-3.5 py-2.5 text-sm text-gray-900 shadow-xs transition focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+          className="w-full sm:max-w-sm rounded-lg border border-gray-300 bg-white px-3.5 py-2.5 text-sm text-gray-900 shadow-xs transition focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
         >
           <option value="">Choose a property…</option>
           {properties.map((p) => (
@@ -573,82 +573,34 @@ export default function CompliancePage() {
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
-              <table className="w-full min-w-[640px] text-sm">
+            <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+              {/* Desktop table */}
+              <table className="hidden sm:table w-full text-sm">
                 <thead>
-                  <tr className="border-b border-gray-200 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
-                    <th className="px-6 py-3">Compliance type</th>
-                    <th className="px-6 py-3">Status</th>
-                    <th className="px-6 py-3">Expiry date</th>
-                    <th className="px-6 py-3">File</th>
-                    <th className="px-6 py-3">Actions</th>
+                  <tr className="border-b border-gray-100 bg-gray-50/60">
+                    <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">Compliance type</th>
+                    <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">Status</th>
+                    <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">Expiry</th>
+                    <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {rows.map(({ complianceType: ct, record }) => {
                     const status = computeStatus(record);
                     return (
-                      <tr key={ct.id} className="hover:bg-gray-50">
-                        {/* Compliance type */}
-                        <td className="px-6 py-4 font-medium text-gray-900">
-                          {ct.name}
-                        </td>
-
-                        {/* Status */}
-                        <td className="px-6 py-4">
-                          <StatusBadge status={status} />
-                        </td>
-
-                        {/* Expiry date */}
-                        <td className="px-6 py-4 text-gray-600">
-                          {record ? formatDate(record.expiry_date) : "—"}
-                        </td>
-
-                        {/* File */}
-                        <td className="px-6 py-4">
-                          {record?.document_url ? (
-                            <a
-                              href={record.document_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1.5 text-sm font-medium text-indigo-600 hover:text-indigo-500"
-                            >
-                              <svg className="h-3.5 w-3.5 shrink-0" viewBox="0 0 20 20" fill="currentColor">
-                                <path d="M12.232 4.232a2.5 2.5 0 0 1 3.536 3.536l-1.225 1.224a.75.75 0 0 0 1.061 1.06l1.224-1.224a4 4 0 0 0-5.656-5.656l-3 3a4 4 0 0 0 .225 5.865.75.75 0 0 0 .977-1.138 2.5 2.5 0 0 1-.142-3.667l3-3Z" />
-                                <path d="M11.603 7.963a.75.75 0 0 0-.977 1.138 2.5 2.5 0 0 1 .142 3.667l-3 3a2.5 2.5 0 0 1-3.536-3.536l1.225-1.224a.75.75 0 0 0-1.061-1.06l-1.224 1.224a4 4 0 1 0 5.656 5.656l3-3a4 4 0 0 0-.225-5.865Z" />
-                              </svg>
-                              View file
-                            </a>
-                          ) : (
-                            <span className="text-xs text-gray-400">No file</span>
-                          )}
-                        </td>
-
-                        {/* Actions */}
+                      <tr key={ct.id} className="hover:bg-gray-50/60 transition-colors">
+                        <td className="px-6 py-4 font-medium text-gray-900">{ct.name}</td>
+                        <td className="px-6 py-4"><StatusBadge status={status} /></td>
+                        <td className="px-6 py-4 text-gray-500 tabular-nums">{record ? formatDate(record.expiry_date) : "—"}</td>
                         <td className="px-6 py-4">
                           {record ? (
                             <div className="flex items-center gap-3">
-                              <button
-                                onClick={() => setPanel({ mode: "edit", record, complianceType: ct })}
-                                className="text-sm font-medium text-indigo-600 hover:text-indigo-500"
-                              >
-                                Edit
-                              </button>
-                              <button
-                                onClick={() => setDeletingRecord(record)}
-                                className="text-sm font-medium text-red-600 hover:text-red-500"
-                              >
-                                Delete
-                              </button>
+                              <button onClick={() => setPanel({ mode: "edit", record, complianceType: ct })} className="text-sm font-medium text-indigo-600 hover:text-indigo-500">Edit</button>
+                              <button onClick={() => setDeletingRecord(record)} className="text-sm font-medium text-red-600 hover:text-red-500">Delete</button>
                             </div>
                           ) : (
-                            <button
-                              onClick={() => setPanel({ mode: "add", complianceType: ct })}
-                              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-50"
-                            >
-                              <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
-                                <path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />
-                              </svg>
+                            <button onClick={() => setPanel({ mode: "add", complianceType: ct })} className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-50">
+                              <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" /></svg>
                               Add record
                             </button>
                           )}
@@ -658,10 +610,46 @@ export default function CompliancePage() {
                   })}
                 </tbody>
               </table>
+
+              {/* Mobile card list */}
+              <div className="sm:hidden divide-y divide-gray-100">
+                {rows.map(({ complianceType: ct, record }) => {
+                  const status = computeStatus(record);
+                  return (
+                    <div key={ct.id} className="px-4 py-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="font-medium text-gray-900 text-sm">{ct.name}</p>
+                          <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+                            <StatusBadge status={status} />
+                            {record?.expiry_date && (
+                              <span className="text-xs text-gray-400">Expires {formatDate(record.expiry_date)}</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="shrink-0">
+                          {record ? (
+                            <div className="flex items-center gap-3">
+                              <button onClick={() => setPanel({ mode: "edit", record, complianceType: ct })} className="text-sm font-medium text-indigo-600 hover:text-indigo-500">Edit</button>
+                              <button onClick={() => setDeletingRecord(record)} className="text-sm font-medium text-red-600 hover:text-red-500">Delete</button>
+                            </div>
+                          ) : (
+                            <button onClick={() => setPanel({ mode: "add", complianceType: ct })} className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-indigo-700">
+                              <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" /></svg>
+                              Add
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
         </>
       )}
+      </div> {/* end p-4 sm:p-8 */}
     </div>
   );
 }
