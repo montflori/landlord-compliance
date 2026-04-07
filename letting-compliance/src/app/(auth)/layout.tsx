@@ -1,3 +1,5 @@
+import Image from "next/image";
+
 export default function AuthLayout({
   children,
 }: {
@@ -6,10 +8,15 @@ export default function AuthLayout({
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 px-4">
       <div className="mb-8 text-center">
-        <span className="text-2xl font-bold text-indigo-600">
-          LettingCompliance
-        </span>
-        <p className="mt-1 text-sm text-gray-500">
+        <Image
+          src="/lucid-let-logo.png"
+          alt="Lucid Let"
+          width={160}
+          height={64}
+          className="h-14 w-auto object-contain mx-auto"
+          priority
+        />
+        <p className="mt-2 text-sm text-gray-500">
           UK letting agent compliance tracker
         </p>
       </div>
