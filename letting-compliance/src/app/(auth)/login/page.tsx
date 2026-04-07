@@ -115,6 +115,20 @@ export default function LoginPage() {
           Sign up
         </Link>
       </p>
+
+      <div className="mt-6 flex items-center gap-3">
+        <div className="flex-1 h-px bg-gray-200" />
+        <span className="text-xs text-gray-400">Are you a tenant?</span>
+        <div className="flex-1 h-px bg-gray-200" />
+      </div>
+      <div className="mt-3 text-center">
+        <Link
+          href="/portal-login"
+          className="text-sm font-medium text-gray-500 transition hover:text-gray-800"
+        >
+          Tenant portal sign in →
+        </Link>
+      </div>
     </>
   );
 }

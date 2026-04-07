@@ -1,0 +1,83 @@
+-- ============================================================
+-- Backfill: auth_user_id on property_tenants
+--
+-- ⚠️  MANUAL STEP — do not run this automatically with the rest
+--     of the migrations. Follow the three-step process below.
+--
+-- Purpose:
+--   Tenants who self-registered (via /signup) before the invite flow
+--   existed have a valid auth.users row but NULL auth_user_id in
+--   property_tenants. This migration links them using email matching.
+--
+-- When to run:
+--   Run AFTER 20260408000000_tenant_portal_v2.sql is applied.
+--   Run BEFORE deploying the portal code that switches to
+--   auth_user_id-first lookup in (tenant)/layout.tsx.
+--
+-- Important:
+--   lead_tenant_email is NOT unique — the same email address could
+--   appear in multiple property_tenants rows (e.g. a tenant with two
+--   properties). This UPDATE will set auth_user_id on ALL matching rows.
+--   Review the Step 1 output carefully before proceeding.
+-- ============================================================
+
+
+-- ── Step 1: Preview matches ───────────────────────────────────────────────────
+--
+-- Run this SELECT first. Review every row before continuing.
+-- Look for:
+--   - Unexpected matches (email typos, shared email addresses)
+--   - Tenants matched to multiple property_tenants rows (legitimate or not)
+--   - property_tenants rows that have NO match (email not yet in auth.users —
+--     these tenants have not self-registered and will need an invite)
+--
+-- SELECT
+--   pt.id                  AS property_tenant_id,
+--   pt.lead_tenant_name,
+--   pt.lead_tenant_email,
+--   pt.property_id,
+--   u.id                   AS matched_user_id,
+--   u.email                AS matched_email,
+--   u.created_at           AS user_created_at
+-- FROM   property_tenants pt
+-- JOIN   auth.users u
+--          ON lower(u.email) = lower(pt.lead_tenant_email)
+-- WHERE  pt.auth_user_id IS NULL
+-- ORDER  BY pt.lead_tenant_email;
+
+
+-- ── Step 2: Apply the backfill ────────────────────────────────────────────────
+--
+-- Only run this after you are satisfied with the Step 1 output.
+-- Uncomment and execute.
+
+-- UPDATE property_tenants pt
+-- SET    auth_user_id = u.id,
+--        updated_at   = now()
+-- FROM   auth.users u
+-- WHERE  lower(u.email) = lower(pt.lead_tenant_email)
+--   AND  pt.auth_user_id IS NULL;
+
+
+-- ── Step 3: Verify ────────────────────────────────────────────────────────────
+--
+-- After the UPDATE, confirm:
+--   - Rows that should have been linked now have auth_user_id set.
+--   - No unexpected rows were changed.
+--
+-- SELECT
+--   pt.id,
+--   pt.lead_tenant_email,
+--   pt.auth_user_id,
+--   u.email AS resolved_email
+-- FROM   property_tenants pt
+-- LEFT   JOIN auth.users u ON u.id = pt.auth_user_id
+-- ORDER  BY pt.lead_tenant_email;
+--
+-- Once verified, it is safe to deploy the portal code that uses
+-- auth_user_id as the primary tenancy lookup.
+--
+-- The "property_tenants_select_by_email" RLS policy (from the first
+-- migration) can be dropped once:
+--   1. All tenants have auth_user_id populated (or have been sent an invite).
+--   2. No active sessions rely on the email-fallback path.
