@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Lucid Let – UK Letting Agent Compliance Tracker",
+  title: "LettingCompliance – UK Letting Agent Compliance Tracker",
   description: "Track landlord and property compliance for UK letting agents.",
 };
 

@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -59,14 +58,9 @@ export default function Sidebar() {
   return (
     <aside className="flex h-full w-60 flex-col border-r border-gray-200 bg-white px-3 py-4">
       <div className="mb-6 px-3">
-        <Image
-          src="/lucid-let-logo.png"
-          alt="Lucid Let"
-          width={120}
-          height={48}
-          className="h-10 w-auto object-contain"
-          priority
-        />
+        <span className="text-lg font-semibold text-indigo-600">
+          LettingCompliance
+        </span>
       </div>
 
       <nav className="flex flex-1 flex-col gap-1">
