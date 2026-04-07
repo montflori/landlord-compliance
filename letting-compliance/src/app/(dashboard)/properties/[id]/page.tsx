@@ -124,7 +124,7 @@ function SectionCard({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="rounded-xl border border-gray-200 bg-white">
+    <div className="rounded-xl border border-gray-200 bg-white shadow-xs">
       <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
         <h2 className="text-sm font-semibold text-gray-900">{title}</h2>
         {action}
@@ -510,31 +510,42 @@ function DocumentCard({
 
     console.log("[upload] storage upload succeeded");
 
+    const { error: deleteError } = await supabase
+      .from("property_documents")
+      .delete()
+      .eq("property_id", propertyId)
+      .eq("document_type", docType);
+
+    if (deleteError) {
+      console.warn("[upload] delete existing row error (non-fatal):", deleteError);
+    }
+
+    const payload = {
+      user_id: user.id,
+      property_id: propertyId,
+      document_type: docType,
+      file_name: file.name,
+      file_path: filePath,
+      file_url: filePath,
+    };
+
+    console.log("[upload] inserting db payload:", JSON.stringify(payload, null, 2));
+
     const { data: doc, error: dbError } = await supabase
       .from("property_documents")
-      .upsert(
-        {
-          user_id: user.id,
-          property_id: propertyId,
-          document_type: docType,
-          file_name: file.name,
-          file_path: filePath,
-          file_url: filePath,
-        },
-        { onConflict: "property_id,document_type" }
-      )
+      .insert(payload)
       .select()
       .single();
 
     if (dbError) {
-      console.error("[upload] db upsert error:", dbError);
+      console.error("[upload] db insert error:", dbError.message, dbError.details, dbError.hint);
       onToast({ type: "error", message: dbError.message });
       setUploading(false);
       e.target.value = "";
       return;
     }
 
-    console.log("[upload] db upsert succeeded:", doc);
+    console.log("[upload] db insert succeeded:", doc);
     setUploading(false);
     e.target.value = "";
     onUploaded(doc);
@@ -560,14 +571,14 @@ function DocumentCard({
   }
 
   return (
-    <div className="flex items-start justify-between gap-4 rounded-lg border border-gray-200 p-4">
+    <div className="flex items-center justify-between gap-4 rounded-lg border border-gray-200 bg-gray-50/50 px-4 py-3.5">
       <div className="min-w-0 flex-1">
         <p className="text-sm font-medium text-gray-900">{label}</p>
         <p className="mt-0.5 text-xs text-gray-500">{description}</p>
         {existing ? (
           <button
             onClick={handleView}
-            className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-indigo-600 hover:text-indigo-500"
+            className="mt-1.5 inline-flex items-center gap-1.5 text-xs font-medium text-indigo-600 hover:text-indigo-500"
           >
             <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
               <path d="M12.232 4.232a2.5 2.5 0 0 1 3.536 3.536l-1.225 1.224a.75.75 0 0 0 1.061 1.06l1.224-1.224a4 4 0 0 0-5.656-5.656l-3 3a4 4 0 0 0 .225 5.865.75.75 0 0 0 .977-1.138 2.5 2.5 0 0 1-.142-3.667l3-3Z" />
@@ -726,17 +737,25 @@ export default function PropertyDetailPage({
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center p-16 text-sm text-gray-400">
-        Loading…
+      <div className="flex items-center justify-center p-20">
+        <div className="flex flex-col items-center gap-3 text-center">
+          <div className="h-6 w-6 animate-spin rounded-full border-2 border-gray-200 border-t-indigo-500" />
+          <p className="text-sm text-gray-400">Loading property…</p>
+        </div>
       </div>
     );
   }
 
   if (!property) {
     return (
-      <div className="p-8">
-        <p className="text-sm text-red-600">Property not found.</p>
-        <Link href="/properties" className="mt-2 inline-block text-sm text-indigo-600 hover:text-indigo-500">
+      <div className="flex flex-col items-center justify-center p-20 text-center">
+        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-50 mb-3">
+          <svg className="h-6 w-6 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
+          </svg>
+        </div>
+        <p className="text-sm font-medium text-gray-900">Property not found</p>
+        <Link href="/properties" className="mt-2 text-sm text-indigo-600 hover:text-indigo-700 font-medium">
           ← Back to properties
         </Link>
       </div>
@@ -744,29 +763,29 @@ export default function PropertyDetailPage({
   }
 
   return (
-    <div className="p-8">
+    <div className="flex flex-col min-h-full">
       {toast && (
         <ToastBanner toast={toast} onDismiss={() => setToast(null)} />
       )}
 
-      {/* Back + header */}
-      <div className="mb-8">
+      {/* Page header */}
+      <div className="border-b border-gray-200 bg-white px-8 py-6">
         <Link
           href="/properties"
-          className="mb-4 inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700"
+          className="mb-4 inline-flex items-center gap-1.5 text-xs font-medium text-gray-400 hover:text-gray-600 transition-colors"
         >
-          <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+          <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
             <path fillRule="evenodd" d="M11.78 5.22a.75.75 0 0 1 0 1.06L8.06 10l3.72 3.72a.75.75 0 1 1-1.06 1.06l-4.25-4.25a.75.75 0 0 1 0-1.06l4.25-4.25a.75.75 0 0 1 1.06 0Z" clipRule="evenodd" />
           </svg>
-          Back to properties
+          Properties
         </Link>
 
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-semibold text-gray-900">
+            <h1 className="text-xl font-semibold tracking-tight text-gray-900">
               {property.address_line_1}
             </h1>
-            <p className="mt-1 text-sm text-gray-500">
+            <p className="mt-0.5 text-sm text-gray-500">
               {[property.address_line_2, property.city, property.postcode]
                 .filter(Boolean)
                 .join(", ")}
@@ -774,21 +793,21 @@ export default function PropertyDetailPage({
           </div>
           <Link
             href={`/properties/${id}/requirements`}
-            className="shrink-0 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+            className="shrink-0 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-xs transition hover:bg-gray-50"
           >
             Edit requirements
           </Link>
         </div>
 
-        <div className="mt-3 flex flex-wrap gap-2">
-          <span className="inline-flex items-center rounded-md bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600">
+        <div className="mt-4 flex flex-wrap gap-2">
+          <span className="inline-flex items-center rounded-md bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600 ring-1 ring-inset ring-gray-200">
             {property.property_type}
           </span>
-          <span className="inline-flex items-center rounded-md bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600">
+          <span className="inline-flex items-center rounded-md bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600 ring-1 ring-inset ring-gray-200">
             {property.bedrooms} bedroom{property.bedrooms !== 1 ? "s" : ""}
           </span>
           {property.landlords?.full_name && (
-            <span className="inline-flex items-center rounded-md bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700">
+            <span className="inline-flex items-center rounded-md bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700 ring-1 ring-inset ring-indigo-200/60">
               {property.landlords.full_name}
             </span>
           )}
@@ -796,7 +815,7 @@ export default function PropertyDetailPage({
       </div>
 
       {/* Sections */}
-      <div className="space-y-6">
+      <div className="p-8 space-y-6">
         <TenantSection propertyId={id} onToast={setToast} />
         <DocumentsSection propertyId={id} onToast={setToast} />
       </div>

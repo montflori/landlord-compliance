@@ -21,6 +21,9 @@ const bebasNeue = Bebas_Neue({
 export const metadata: Metadata = {
   title: "Let Lucid – UK Letting Agent Compliance Tracker",
   description: "Track landlord and property compliance for UK letting agents.",
+  icons: {
+    icon: "/let-lucid-logo.png",
+  },
 };
 
 export default function RootLayout({

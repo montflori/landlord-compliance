@@ -197,10 +197,13 @@ function AddPropertyPanel({ landlords, onAdded, onClose }: {
   return (
     <>
       <div className="fixed inset-0 z-30 bg-black/20 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed inset-y-0 right-0 z-40 flex w-full max-w-md flex-col border-l border-gray-200 bg-white shadow-xl">
-        <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
-          <h2 className="text-base font-semibold text-gray-900">Add property</h2>
-          <button type="button" onClick={onClose} className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+      <div className="fixed inset-y-0 right-0 z-40 flex w-full max-w-md flex-col bg-white shadow-2xl ring-1 ring-black/5">
+        <div className="flex items-center justify-between border-b border-gray-100 px-6 py-5">
+          <div>
+            <h2 className="text-base font-semibold text-gray-900">Add property</h2>
+            <p className="mt-0.5 text-xs text-gray-400">Fill in the details below to add a new property.</p>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors">
             <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
               <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
             </svg>
@@ -281,7 +284,7 @@ function SectionCard({ title, children, action }: {
   title: string; children: React.ReactNode; action?: React.ReactNode;
 }) {
   return (
-    <div className="rounded-xl border border-gray-200 bg-white">
+    <div className="rounded-xl border border-gray-200 bg-white shadow-xs">
       <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
         <h2 className="text-sm font-semibold text-gray-900">{title}</h2>
         {action}
@@ -544,31 +547,44 @@ function DocumentCard({ propertyId, docType, label, description, existing, onUpl
 
     console.log("[upload] storage upload succeeded");
 
+    // Delete any existing row for this slot first (avoids UPDATE path RLS issues
+    // on rows that may have been created without a user_id)
+    const { error: deleteError } = await supabase
+      .from("property_documents")
+      .delete()
+      .eq("property_id", propertyId)
+      .eq("document_type", docType);
+
+    if (deleteError) {
+      console.warn("[upload] delete existing row error (non-fatal):", deleteError);
+    }
+
+    const payload = {
+      user_id: user.id,
+      property_id: propertyId,
+      document_type: docType,
+      file_name: file.name,
+      file_path: filePath,
+      file_url: filePath,
+    };
+
+    console.log("[upload] inserting db payload:", JSON.stringify(payload, null, 2));
+
     const { data: doc, error: dbError } = await supabase
       .from("property_documents")
-      .upsert(
-        {
-          user_id: user.id,
-          property_id: propertyId,
-          document_type: docType,
-          file_name: file.name,
-          file_path: filePath,
-          file_url: filePath,
-        },
-        { onConflict: "property_id,document_type" }
-      )
+      .insert(payload)
       .select()
       .single();
 
     if (dbError) {
-      console.error("[upload] db upsert error:", dbError);
+      console.error("[upload] db insert error:", dbError.message, dbError.details, dbError.hint);
       onToast({ type: "error", message: dbError.message });
       setUploading(false);
       e.target.value = "";
       return;
     }
 
-    console.log("[upload] db upsert succeeded:", doc);
+    console.log("[upload] db insert succeeded:", doc);
     setUploading(false);
     e.target.value = "";
     onUploaded(doc);
@@ -732,7 +748,7 @@ export default function PropertiesPage() {
   }
 
   return (
-    <div className="p-8">
+    <div className="flex flex-col min-h-full p-8">
       {toast && <ToastBanner toast={toast} onDismiss={() => setToast(null)} />}
 
       {deletingProperty && (
@@ -747,21 +763,28 @@ export default function PropertiesPage() {
       )}
 
       {/* ── Header ── */}
-      <div className="mb-6 flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-semibold text-gray-900">Properties</h1>
-        <button type="button" onClick={() => setShowPanel(true)}
-          className="flex shrink-0 items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700">
-          <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-            <path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />
-          </svg>
-          Add property
-        </button>
+      <div className="border-b border-gray-200 bg-white px-8 py-6 -mx-8 -mt-8 mb-8">
+        <div className="flex items-end justify-between gap-4">
+          <div>
+            <h1 className="text-xl font-semibold tracking-tight text-gray-900">Properties</h1>
+            <p className="mt-0.5 text-sm text-gray-500">
+              {properties.length > 0 ? `${properties.length} propert${properties.length === 1 ? "y" : "ies"} in your portfolio` : "Manage your property portfolio"}
+            </p>
+          </div>
+          <button type="button" onClick={() => setShowPanel(true)}
+            className="flex shrink-0 items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-700">
+            <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+              <path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />
+            </svg>
+            Add property
+          </button>
+        </div>
       </div>
 
       {fetchError && <p className="mb-4 text-sm text-red-600">{fetchError}</p>}
 
       {/* ── Search ── */}
-      <div className="relative mb-5">
+      <div className="relative mb-6">
         <svg className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
           <path fillRule="evenodd" d="M9 3.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11ZM2 9a7 7 0 1 1 12.452 4.391l3.328 3.329a.75.75 0 1 1-1.06 1.06l-3.329-3.328A7 7 0 0 1 2 9Z" clipRule="evenodd" />
         </svg>
@@ -770,23 +793,31 @@ export default function PropertiesPage() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search by address, city or postcode…"
-          className="w-full rounded-lg border border-gray-300 bg-white py-2.5 pl-10 pr-4 text-sm text-gray-900 placeholder-gray-400 shadow-xs transition focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+          className="w-full rounded-lg border border-gray-200 bg-white py-2.5 pl-10 pr-4 text-sm text-gray-900 placeholder-gray-400 shadow-xs transition focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
         />
       </div>
 
-      {/* ── Summary cards row ── */}
+      {/* ── Property cards ── */}
       {properties.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-xl border border-gray-200 bg-white py-16 text-center">
+        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-gray-300 bg-white py-20 text-center">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 mb-3">
+            <svg className="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="m2.25 12 8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
+            </svg>
+          </div>
           <p className="text-sm font-medium text-gray-900">No properties yet</p>
-          <p className="mt-1 text-sm text-gray-400">Add your first property to get started.</p>
-          <button type="button" onClick={() => setShowPanel(true)} className="mt-4 text-sm font-medium text-indigo-600 hover:text-indigo-500">
-            Add a property →
+          <p className="mt-1 text-sm text-gray-400">Add your first property to start tracking compliance.</p>
+          <button type="button" onClick={() => setShowPanel(true)} className="mt-4 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">
+            Add your first property
           </button>
         </div>
       ) : filtered.length === 0 ? (
-        <p className="text-sm text-gray-400">No properties match &ldquo;{query}&rdquo;.</p>
+        <div className="flex flex-col items-center justify-center rounded-xl border border-gray-200 bg-white py-12 text-center">
+          <p className="text-sm font-medium text-gray-700">No properties match &ldquo;{query}&rdquo;</p>
+          <button type="button" onClick={() => setQuery("")} className="mt-2 text-xs text-indigo-600 hover:text-indigo-700 font-medium">Clear search</button>
+        </div>
       ) : (
-        <div ref={cardsRef} className="mb-8 flex gap-3 overflow-x-auto pb-2">
+        <div ref={cardsRef} className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
           {filtered.map((p) => {
             const isSelected = p.id === selectedId;
             return (
@@ -794,16 +825,21 @@ export default function PropertiesPage() {
                 key={p.id}
                 type="button"
                 onClick={() => setSelectedId(isSelected ? null : p.id)}
-                className={`flex w-44 shrink-0 flex-col rounded-xl border p-4 text-left transition focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1 ${
+                className={`flex flex-col rounded-xl border p-4 text-left transition focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1 ${
                   isSelected
-                    ? "border-indigo-500 bg-indigo-50 shadow-sm"
-                    : "border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50"
+                    ? "border-indigo-400 bg-indigo-50 shadow-sm ring-1 ring-indigo-400/30"
+                    : "border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm"
                 }`}
               >
-                <p className={`text-sm font-medium leading-snug ${isSelected ? "text-indigo-900" : "text-gray-900"}`}>
+                <div className={`mb-3 flex h-8 w-8 items-center justify-center rounded-lg ${isSelected ? "bg-indigo-100" : "bg-gray-100"}`}>
+                  <svg className={`h-4 w-4 ${isSelected ? "text-indigo-600" : "text-gray-500"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m2.25 12 8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
+                  </svg>
+                </div>
+                <p className={`text-sm font-semibold leading-snug ${isSelected ? "text-indigo-900" : "text-gray-900"}`}>
                   {p.address_line_1}
                 </p>
-                <p className={`mt-0.5 text-xs ${isSelected ? "text-indigo-600" : "text-gray-400"}`}>
+                <p className={`mt-0.5 text-xs ${isSelected ? "text-indigo-500" : "text-gray-400"}`}>
                   {p.city}, {p.postcode}
                 </p>
                 <div className="mt-3">
@@ -819,10 +855,10 @@ export default function PropertiesPage() {
       {selectedProperty && (
         <div className="space-y-6">
           {/* Selected property header */}
-          <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start justify-between gap-4 rounded-xl border border-indigo-100 bg-indigo-50/50 px-6 py-5">
             <div>
               <div className="flex items-center gap-2.5">
-                <h2 className="text-lg font-semibold text-gray-900">{selectedProperty.address_line_1}</h2>
+                <h2 className="text-base font-semibold text-gray-900">{selectedProperty.address_line_1}</h2>
                 <OccupancyBadge status={selectedProperty.occupancy_status} />
               </div>
               <p className="mt-0.5 text-sm text-gray-500">
@@ -831,7 +867,7 @@ export default function PropertiesPage() {
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <a href={`/properties/${selectedProperty.id}/requirements`}
-                className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50">
+                className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 shadow-xs transition hover:bg-gray-50">
                 Requirements
               </a>
               <button type="button" onClick={() => setDeletingProperty(selectedProperty)}
