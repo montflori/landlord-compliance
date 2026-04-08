@@ -47,6 +47,15 @@ export async function GET(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  // ── Temporary: env var presence check (booleans only, no secret values) ──────
+  console.log("[tenant-invite GET] env check", {
+    hasSupabaseUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
+    hasServiceRoleKey: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+    hasAnonKey: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    hasResendKey: !!process.env.RESEND_API_KEY,
+    hasReminderFromEmail: !!process.env.REMINDER_FROM_EMAIL,
+  });
+
   const admin = createAdminClient();
 
   // Verify the agent owns the property this tenancy belongs to
