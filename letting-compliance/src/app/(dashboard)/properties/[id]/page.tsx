@@ -169,15 +169,27 @@ function TenantInviteButton({
   async function handleSend() {
     setSending(true);
     setError("");
-    const res = await fetch("/api/tenant-invite", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ propertyTenantId }),
-    });
-    const data = await res.json();
+    let res: Response;
+    try {
+      res = await fetch("/api/tenant-invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ propertyTenantId }),
+      });
+    } catch {
+      setSending(false);
+      setError("Network error — please check your connection and try again.");
+      return;
+    }
+    let data: { error?: string } = {};
+    try {
+      data = await res.json();
+    } catch {
+      // Response body was empty or non-JSON (e.g. HTML error page)
+    }
     setSending(false);
     if (!res.ok) {
-      setError(data.error ?? "Failed to send invite.");
+      setError(data.error ?? `Server error (${res.status}). Please try again.`);
       return;
     }
     setStatus("pending");
