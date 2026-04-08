@@ -54,6 +54,14 @@ export default function ResetPasswordPage() {
       return;
     }
 
+    // Backfill auth_user_id on property_tenants if it is not yet set.
+    // This covers tenants who arrived via a recovery link rather than the
+    // accept-invite token flow, where auth_user_id would not have been written.
+    // Fire-and-forget: a failure here does not block portal access.
+    fetch("/api/tenant-invite/link", { method: "POST" }).catch(() => {
+      // Non-critical — portal lookup has an email fallback.
+    });
+
     setDone(true);
     setTimeout(() => router.replace("/portal"), 1500);
   }

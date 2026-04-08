@@ -250,43 +250,103 @@ async function postHandler(request: NextRequest, tag: string): Promise<Response>
   }
 
   // Path A: tenant does not yet have a linked auth account
-  // ── Step 4A: Generate invite or magic link ───────────────────────────────────
+  // ── Step 4A: Generate invite link ───────────────────────────────────────────
   const rawToken = randomBytes(32).toString("hex");
   const tokenHash = hashToken(rawToken);
   const acceptPath = `/portal/accept-invite?token=${rawToken}`;
-  const redirectTo = buildAppUrl(
+  const inviteRedirectTo = buildAppUrl(
     `/auth/callback?next=${encodeURIComponent(acceptPath)}`
   );
 
-  // Try 'invite' first (creates the auth user if they don't exist).
-  // If the user already exists, Supabase rejects 'invite' — fall back to
-  // 'magiclink' so the existing user gets a one-time sign-in link that
-  // still flows through /auth/callback → /portal/accept-invite.
-  console.log(`${tag} step4A calling generateLink(invite) for email=<redacted> redirectTo=${redirectTo}`);
-  let { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
+  console.log(`${tag} step4A calling generateLink(invite) for email=<redacted> propertyTenantId=${propertyTenantId}`);
+  const { data: inviteData, error: inviteError } = await admin.auth.admin.generateLink({
     type: "invite",
     email: tenantEmail,
-    options: { redirectTo },
+    options: { redirectTo: inviteRedirectTo },
   });
 
-  if (linkError && /already registered/i.test(linkError.message ?? "")) {
-    console.log(`${tag} step4A user already exists in auth — falling back to magiclink`);
-    ({ data: linkData, error: linkError } = await admin.auth.admin.generateLink({
-      type: "magiclink",
+  // ── Step 4A-recovery: Already-registered fallback ────────────────────────────
+  // If Supabase rejects the invite because the email is already in auth, the
+  // tenant has an existing account but auth_user_id on property_tenants is null
+  // (e.g. they never completed the first accept-invite flow). Treat them like
+  // Path B: generate a recovery link, backfill auth_user_id, send reset email.
+  const alreadyRegistered =
+    !!inviteError &&
+    (/already registered/i.test(inviteError.message ?? "") ||
+      /user already registered/i.test(inviteError.message ?? ""));
+
+  if (alreadyRegistered) {
+    console.log(`${tag} step4A-recovery invite rejected (already registered) — switching to recovery path for propertyTenantId=${propertyTenantId}`);
+
+    const recoveryRedirectTo = buildAppUrl(
+      `/auth/callback?next=${encodeURIComponent("/portal/reset-password")}`
+    );
+
+    const { data: recoveryData, error: recoveryError } = await admin.auth.admin.generateLink({
+      type: "recovery",
       email: tenantEmail,
-      options: { redirectTo },
-    }));
+      options: { redirectTo: recoveryRedirectTo },
+    });
+
+    if (recoveryError || !recoveryData?.properties?.action_link) {
+      console.error(`${tag} step4A-recovery generateLink(recovery) failed: ${recoveryError?.message ?? "no action_link"}`);
+      return NextResponse.json(
+        { error: `Failed to send access link: ${recoveryError?.message ?? "no action_link returned"}` },
+        { status: 500 }
+      );
+    }
+    console.log(`${tag} step4A-recovery recovery link generated`);
+
+    // Backfill auth_user_id now that we know the auth user exists.
+    // recoveryData.user is the Supabase auth user record.
+    const recoveredAuthUserId = (recoveryData as any).user?.id as string | undefined;
+    if (recoveredAuthUserId) {
+      const { error: backfillError } = await admin
+        .from("property_tenants")
+        .update({ auth_user_id: recoveredAuthUserId })
+        .eq("id", propertyTenantId)
+        .is("auth_user_id", null); // no-op if somehow already set
+      if (backfillError) {
+        console.error(`${tag} step4A-recovery auth_user_id backfill failed: ${backfillError.message}`);
+      } else {
+        console.log(`${tag} step4A-recovery auth_user_id backfilled: propertyTenantId=${propertyTenantId} authUserId=${recoveredAuthUserId}`);
+      }
+    } else {
+      console.warn(`${tag} step4A-recovery no user id in recovery response — skipping backfill`);
+    }
+
+    // Send recovery email (no invite row — this is the reset-password path).
+    console.log(`${tag} step4A-recovery sending recovery email to=<redacted>`);
+    try {
+      await sendTenantInviteEmail({
+        to: tenantEmail,
+        tenantName: tenancy.lead_tenant_name,
+        propertyAddress: address,
+        agentName: landlord.full_name ?? "Your letting agent",
+        actionLink: recoveryData.properties.action_link,
+      });
+    } catch (emailError) {
+      const msg = emailError instanceof Error ? emailError.message : String(emailError);
+      console.error(`${tag} step4A-recovery recovery email send failed: ${msg}`);
+      return NextResponse.json(
+        { error: `Recovery email failed to send: ${msg}. Please resend.` },
+        { status: 500 }
+      );
+    }
+    console.log(`${tag} step4A-recovery recovery email sent`);
+    return NextResponse.json({ success: true });
   }
 
-  if (linkError || !linkData?.properties?.action_link) {
-    console.error(`${tag} step4A generateLink failed: ${linkError?.message ?? "no action_link in response"}`);
-    console.error(`${tag} step4A generateLink full error:`, JSON.stringify(linkError ?? {}));
+  // ── Hard failure — invite generation failed for an unexpected reason ─────────
+  if (inviteError || !inviteData?.properties?.action_link) {
+    console.error(`${tag} step4A generateLink(invite) failed: ${inviteError?.message ?? "no action_link in response"}`);
+    console.error(`${tag} step4A generateLink full error:`, JSON.stringify(inviteError ?? {}));
     return NextResponse.json(
-      { error: `Failed to generate invite link: ${linkError?.message ?? "no action_link returned"}` },
+      { error: `Failed to generate invite link: ${inviteError?.message ?? "no action_link returned"}` },
       { status: 500 }
     );
   }
-  console.log(`${tag} step4A generateLink succeeded`);
+  console.log(`${tag} step4A generateLink(invite) succeeded — proceeding with invite flow`);
 
   // ── Step 5A: Persist the invite row ─────────────────────────────────────────
   const { error: insertError } = await admin.from("tenant_invites").insert({
@@ -314,7 +374,7 @@ async function postHandler(request: NextRequest, tag: string): Promise<Response>
       tenantName: tenancy.lead_tenant_name,
       propertyAddress: address,
       agentName: landlord.full_name ?? "Your letting agent",
-      actionLink: linkData.properties.action_link,
+      actionLink: inviteData.properties.action_link,
     });
   } catch (emailError) {
     // Invite row was inserted — log failure but let agent resend.
