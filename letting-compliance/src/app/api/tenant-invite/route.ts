@@ -210,12 +210,26 @@ async function postHandler(request: NextRequest, tag: string): Promise<Response>
     `/auth/callback?next=${encodeURIComponent(acceptPath)}`
   );
 
-  console.log(`${tag} step4 calling generateLink for email=<redacted> redirectTo=${redirectTo}`);
-  const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
+  // ── Step 4: Generate Supabase link ───────────────────────────────────────────
+  // Try 'invite' first (creates the auth user if they don't exist).
+  // If the user already exists, Supabase rejects 'invite' — fall back to
+  // 'magiclink' so the existing user gets a one-time sign-in link that
+  // still flows through /auth/callback → /portal/accept-invite.
+  console.log(`${tag} step4 calling generateLink(invite) for email=<redacted> redirectTo=${redirectTo}`);
+  let { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
     type: "invite",
     email: tenantEmail,
     options: { redirectTo },
   });
+
+  if (linkError && /already registered/i.test(linkError.message ?? "")) {
+    console.log(`${tag} step4 user already exists — falling back to magiclink`);
+    ({ data: linkData, error: linkError } = await admin.auth.admin.generateLink({
+      type: "magiclink",
+      email: tenantEmail,
+      options: { redirectTo },
+    }));
+  }
 
   if (linkError || !linkData?.properties?.action_link) {
     console.error(`${tag} step4 generateLink failed: ${linkError?.message ?? "no action_link in response"}`);
