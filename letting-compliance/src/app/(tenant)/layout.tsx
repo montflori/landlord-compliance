@@ -23,7 +23,7 @@ export default async function TenantLayout({
 
   const { data: byUserId } = await admin
     .from("property_tenants")
-    .select("id, property_id, lead_tenant_name")
+    .select("id, property_id, lead_tenant_name, portal_activated_at")
     .eq("auth_user_id", user.id)
     .maybeSingle();
 
@@ -35,7 +35,7 @@ export default async function TenantLayout({
     console.log("[portal layout] tenancy lookup: email fallback");
     const { data: byEmail } = await admin
       .from("property_tenants")
-      .select("id, property_id, lead_tenant_name")
+      .select("id, property_id, lead_tenant_name, portal_activated_at")
       .eq("lead_tenant_email", user.email ?? "")
       .maybeSingle();
     tenancy = byEmail ?? null;
@@ -43,6 +43,12 @@ export default async function TenantLayout({
 
   if (!tenancy) {
     redirect("/portal-login?message=no-tenancy");
+  }
+
+  // Gate: tenant must have completed password setup before accessing the portal.
+  if (!tenancy.portal_activated_at) {
+    console.log(`[portal layout] tenancy not yet activated — redirecting to setup: propertyTenantId=${tenancy.id}`);
+    redirect("/portal-login?message=setup-required");
   }
 
   return (

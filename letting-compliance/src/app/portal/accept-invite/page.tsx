@@ -99,6 +99,16 @@ function AcceptInviteInner() {
       return;
     }
 
+    // Set portal_activated_at now that password setup is complete.
+    // auth_user_id was already written by /api/tenant-invite/accept on mount;
+    // this call activates the portal gate in the layout.
+    // Awaited so the gate is satisfied before redirect.
+    try {
+      await fetch("/api/tenant-invite/link", { method: "POST" });
+    } catch {
+      // Non-fatal: portal has an email fallback.
+    }
+
     setStage("done");
     // Short pause so the success state is visible before redirecting
     setTimeout(() => router.replace("/portal"), 1200);
