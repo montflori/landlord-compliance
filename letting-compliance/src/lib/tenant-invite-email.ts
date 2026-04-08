@@ -12,11 +12,7 @@
  */
 
 import { Resend } from "resend";
-
-function buildAppUrl(path: string): string {
-  const base = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-  return `${base}${path}`;
-}
+import { buildAppUrl } from "@/lib/app-url";
 
 function buildEmailHtml(opts: {
   tenantName: string | null;

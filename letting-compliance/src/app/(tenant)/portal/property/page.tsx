@@ -54,34 +54,51 @@ export default async function TenantPropertyPage() {
 
   const admin = createAdminClient();
 
-  const { data: tenancy } = await admin
-    .from("property_tenants")
-    .select(`
+  // auth_user_id first, email fallback for pre-accept tenants
+  const tenancySelect = `
+    id,
+    property_id,
+    lead_tenant_name,
+    lead_tenant_email,
+    lead_tenant_phone,
+    additional_tenants,
+    tenancy_start_date,
+    tenancy_end_date,
+    monthly_rent,
+    deposit_amount,
+    notes,
+    properties (
       id,
-      property_id,
-      lead_tenant_name,
-      lead_tenant_email,
-      lead_tenant_phone,
-      additional_tenants,
-      tenancy_start_date,
-      tenancy_end_date,
-      monthly_rent,
-      deposit_amount,
-      notes,
-      properties (
-        id,
-        address_line_1,
-        address_line_2,
-        city,
-        postcode,
-        property_type,
-        bedrooms,
-        occupancy_status,
-        landlords ( full_name, email, phone )
-      )
-    `)
-    .eq("lead_tenant_email", user.email ?? "")
+      address_line_1,
+      address_line_2,
+      city,
+      postcode,
+      property_type,
+      bedrooms,
+      occupancy_status,
+      landlords ( full_name, email, phone )
+    )
+  `;
+
+  const { data: byUserId } = await admin
+    .from("property_tenants")
+    .select(tenancySelect)
+    .eq("auth_user_id", user.id)
     .maybeSingle();
+
+  let tenancy = byUserId ?? null;
+
+  if (tenancy) {
+    console.log("[portal property] tenancy lookup: auth_user_id");
+  } else {
+    console.log("[portal property] tenancy lookup: email fallback");
+    const { data: byEmail } = await admin
+      .from("property_tenants")
+      .select(tenancySelect)
+      .eq("lead_tenant_email", user.email ?? "")
+      .maybeSingle();
+    tenancy = byEmail ?? null;
+  }
 
   if (!tenancy) redirect("/portal-login?message=no-tenancy");
 

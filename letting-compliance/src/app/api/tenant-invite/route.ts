@@ -33,13 +33,10 @@ import { createHash, randomBytes } from "crypto";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendTenantInviteEmail } from "@/lib/tenant-invite-email";
+import { buildAppUrl, getAppBaseUrl } from "@/lib/app-url";
 
 function hashToken(raw: string): string {
   return createHash("sha256").update(raw).digest("hex");
-}
-
-function buildAppUrl(path: string): string {
-  return `${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}${path}`;
 }
 
 // ── GET — invite status ───────────────────────────────────────────────────────
@@ -196,6 +193,8 @@ async function postHandler(request: NextRequest, tag: string): Promise<Response>
 
   // ── Step 4: Branch on whether the tenant's auth account is already linked ────
   const authUserId = (tenancy as any).auth_user_id as string | null;
+  console.log(`${tag} step4 branch decision: propertyTenantId=${propertyTenantId} tenantEmail=<redacted> authUserId=${authUserId ?? "null"} branch=${authUserId ? "recovery" : "invite"} baseUrl=${getAppBaseUrl()}`);
+
   const address = [
     (prop as any).address_line_1,
     (prop as any).address_line_2,

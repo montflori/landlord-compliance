@@ -18,13 +18,28 @@ export default async function TenantLayout({
     redirect("/portal-login");
   }
 
-  // 2. Verify the user's email matches a tenancy record
+  // 2. Resolve tenancy — auth_user_id first (post-invite-accept), email fallback (legacy / pre-accept)
   const admin = createAdminClient();
-  const { data: tenancy } = await admin
+
+  const { data: byUserId } = await admin
     .from("property_tenants")
     .select("id, property_id, lead_tenant_name")
-    .eq("lead_tenant_email", user.email ?? "")
+    .eq("auth_user_id", user.id)
     .maybeSingle();
+
+  let tenancy = byUserId ?? null;
+
+  if (tenancy) {
+    console.log("[portal layout] tenancy lookup: auth_user_id");
+  } else {
+    console.log("[portal layout] tenancy lookup: email fallback");
+    const { data: byEmail } = await admin
+      .from("property_tenants")
+      .select("id, property_id, lead_tenant_name")
+      .eq("lead_tenant_email", user.email ?? "")
+      .maybeSingle();
+    tenancy = byEmail ?? null;
+  }
 
   if (!tenancy) {
     redirect("/portal-login?message=no-tenancy");

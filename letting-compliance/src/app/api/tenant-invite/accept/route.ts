@@ -10,6 +10,11 @@
  *   3. Write auth_user_id on property_tenants (the permanent identity link)
  *   4. Mark the invite as accepted
  *
+ * Email matching:
+ *   tenant_invites.email is stored from property_tenants.lead_tenant_email at
+ *   invite-creation time. Comparing user.email against invite.email is equivalent
+ *   to comparing against lead_tenant_email.
+ *
  * This route uses the admin client for all DB writes so it is not blocked
  * by RLS. The caller's identity comes from their Supabase session cookie,
  * verified via the server client.
@@ -68,9 +73,28 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // ── 4. Validate status and expiry ────────────────────────────────────────────
+  // ── 4. Verify the authenticated user's email matches the invite ──────────────
+  // invite.email is sourced from property_tenants.lead_tenant_email at invite
+  // creation time. Done before status checks so the safety-net write below can
+  // also rely on the email being verified.
+  if (user.email?.toLowerCase() !== invite.email.toLowerCase()) {
+    return NextResponse.json(
+      { error: "This invite was sent to a different email address." },
+      { status: 403 }
+    );
+  }
+
+  // ── 5. Validate status and expiry ────────────────────────────────────────────
   if (invite.status === "accepted") {
-    // Already accepted — portal access already exists; let the page redirect gracefully
+    // Invite already consumed. Write auth_user_id defensively in case a prior
+    // attempt validated the token and marked it accepted but failed before the
+    // property_tenants update completed.
+    console.log(`[accept-invite] alreadyAccepted — defensive auth_user_id write: propertyTenantId=${invite.property_tenant_id} authUserId=${user.id} leadTenantEmail=<redacted>`);
+    await admin
+      .from("property_tenants")
+      .update({ auth_user_id: user.id })
+      .eq("id", invite.property_tenant_id)
+      .is("auth_user_id", null); // no-op if already set
     return NextResponse.json({ alreadyAccepted: true });
   }
 
@@ -94,28 +118,22 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // ── 5. Verify the authenticated user's email matches the invite ──────────────
-  // Prevents a logged-in tenant from accepting an invite meant for someone else.
-  if (user.email?.toLowerCase() !== invite.email.toLowerCase()) {
-    return NextResponse.json(
-      { error: "This invite was sent to a different email address." },
-      { status: 403 }
-    );
-  }
-
   // ── 6. Write auth_user_id on property_tenants ────────────────────────────────
+  console.log(`[accept-invite] linking: propertyTenantId=${invite.property_tenant_id} authUserId=${user.id} leadTenantEmail=<redacted>`);
+
   const { error: updateError } = await admin
     .from("property_tenants")
     .update({ auth_user_id: user.id })
     .eq("id", invite.property_tenant_id);
 
   if (updateError) {
-    console.error("[accept-invite] failed to write auth_user_id:", updateError.message);
+    console.error(`[accept-invite] auth_user_id write failed: propertyTenantId=${invite.property_tenant_id} authUserId=${user.id} error=${updateError.message}`);
     return NextResponse.json(
       { error: "Failed to link your account. Please try again." },
       { status: 500 }
     );
   }
+  console.log(`[accept-invite] auth_user_id write succeeded: propertyTenantId=${invite.property_tenant_id} authUserId=${user.id}`);
 
   // ── 7. Mark the invite as accepted ───────────────────────────────────────────
   await admin

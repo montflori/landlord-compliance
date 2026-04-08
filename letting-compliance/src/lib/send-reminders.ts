@@ -21,6 +21,7 @@
 
 import { Resend } from "resend";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { buildAppUrl } from "@/lib/app-url";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -50,13 +51,6 @@ function formatDate(iso: string): string {
     month: "long",
     year: "numeric",
   });
-}
-
-function buildAppUrl(path: string): string {
-  // Falls back to localhost in development if NEXT_PUBLIC_APP_URL is not set
-  const base =
-    process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-  return `${base}${path}`;
 }
 
 // ─── Email template ────────────────────────────────────────────────────────────

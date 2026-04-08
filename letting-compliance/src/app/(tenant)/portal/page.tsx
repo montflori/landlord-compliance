@@ -72,29 +72,45 @@ export default async function TenantDashboardPage() {
 
   const admin = createAdminClient();
 
-  // Fetch tenancy + property
-  const { data: tenancy } = await admin
-    .from("property_tenants")
-    .select(`
+  // Fetch tenancy + property — auth_user_id first, email fallback for pre-accept tenants
+  const tenancySelect = `
+    id,
+    property_id,
+    lead_tenant_name,
+    tenancy_start_date,
+    tenancy_end_date,
+    monthly_rent,
+    properties (
       id,
-      property_id,
-      lead_tenant_name,
-      tenancy_start_date,
-      tenancy_end_date,
-      monthly_rent,
-      properties (
-        id,
-        address_line_1,
-        address_line_2,
-        city,
-        postcode,
-        property_type,
-        bedrooms,
-        landlords ( full_name )
-      )
-    `)
-    .eq("lead_tenant_email", user.email ?? "")
+      address_line_1,
+      address_line_2,
+      city,
+      postcode,
+      property_type,
+      bedrooms,
+      landlords ( full_name )
+    )
+  `;
+
+  const { data: byUserId } = await admin
+    .from("property_tenants")
+    .select(tenancySelect)
+    .eq("auth_user_id", user.id)
     .maybeSingle();
+
+  let tenancy = byUserId ?? null;
+
+  if (tenancy) {
+    console.log("[portal dashboard] tenancy lookup: auth_user_id");
+  } else {
+    console.log("[portal dashboard] tenancy lookup: email fallback");
+    const { data: byEmail } = await admin
+      .from("property_tenants")
+      .select(tenancySelect)
+      .eq("lead_tenant_email", user.email ?? "")
+      .maybeSingle();
+    tenancy = byEmail ?? null;
+  }
 
   if (!tenancy) redirect("/portal-login?message=no-tenancy");
 

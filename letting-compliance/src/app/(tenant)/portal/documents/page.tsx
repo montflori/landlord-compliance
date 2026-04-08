@@ -353,18 +353,32 @@ export default function TenantDocumentsPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Tenancy lookup (relies on RLS policy or permissive read for own email)
-      const { data: tenancyData, error: tenancyError } = await supabase
+      // auth_user_id first (post-accept), email fallback (pre-accept / legacy)
+      const { data: byUserId } = await supabase
         .from("property_tenants")
         .select("id, property_id")
-        .eq("lead_tenant_email", user.email ?? "")
+        .eq("auth_user_id", user.id)
         .maybeSingle();
 
-      if (tenancyError || !tenancyData) {
-        if (!cancelled) setFetchError("Could not load your tenancy details.");
-        setLoading(false);
-        return;
+      let tenancyData: TenancyInfo | null = byUserId ?? null;
+
+      if (tenancyData) {
+        console.log("[portal docs] tenancy lookup: auth_user_id");
+      } else {
+        console.log("[portal docs] tenancy lookup: email fallback");
+        const { data: byEmail, error: emailError } = await supabase
+          .from("property_tenants")
+          .select("id, property_id")
+          .eq("lead_tenant_email", user.email ?? "")
+          .maybeSingle();
+        if (emailError || !byEmail) {
+          if (!cancelled) setFetchError("Could not load your tenancy details.");
+          setLoading(false);
+          return;
+        }
+        tenancyData = byEmail;
       }
+
       if (!cancelled) setTenancy(tenancyData);
 
       // Documents
