@@ -52,8 +52,7 @@
 -- Uncomment and execute.
 
 -- UPDATE property_tenants pt
--- SET    auth_user_id = u.id,
---        updated_at   = now()
+-- SET    auth_user_id = u.id
 -- FROM   auth.users u
 -- WHERE  lower(u.email) = lower(pt.lead_tenant_email)
 --   AND  pt.auth_user_id IS NULL;

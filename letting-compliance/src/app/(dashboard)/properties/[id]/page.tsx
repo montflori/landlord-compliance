@@ -134,6 +134,98 @@ function SectionCard({
   );
 }
 
+// ─── Tenant invite button ─────────────────────────────────────────────────────
+
+type InviteStatus = "none" | "pending" | "accepted" | "expired";
+
+function TenantInviteButton({
+  propertyTenantId,
+  tenantEmail,
+}: {
+  propertyTenantId: string;
+  tenantEmail: string | null;
+}) {
+  const [status, setStatus] = useState<InviteStatus>("none");
+  const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState("");
+
+  // Fetch current invite status
+  useEffect(() => {
+    async function load() {
+      setLoading(true);
+      const res = await fetch(
+        `/api/tenant-invite?propertyTenantId=${propertyTenantId}`
+      );
+      if (res.ok) {
+        const { invite } = await res.json();
+        setStatus(invite ? (invite.status as InviteStatus) : "none");
+      }
+      setLoading(false);
+    }
+    load();
+  }, [propertyTenantId]);
+
+  async function handleSend() {
+    setSending(true);
+    setError("");
+    const res = await fetch("/api/tenant-invite", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ propertyTenantId }),
+    });
+    const data = await res.json();
+    setSending(false);
+    if (!res.ok) {
+      setError(data.error ?? "Failed to send invite.");
+      return;
+    }
+    setStatus("pending");
+  }
+
+  if (!tenantEmail) return null;
+  if (loading) return null;
+
+  const label: Record<InviteStatus, string> = {
+    none: "Send portal invite",
+    pending: "Resend invite",
+    accepted: "",
+    expired: "Resend invite",
+  };
+
+  return (
+    <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center">
+      {status === "accepted" ? (
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700 ring-1 ring-inset ring-emerald-600/20">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden="true" />
+          Portal active
+        </span>
+      ) : (
+        <>
+          {status === "pending" && (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700 ring-1 ring-inset ring-amber-600/20">
+              <span className="h-1.5 w-1.5 rounded-full bg-amber-400" aria-hidden="true" />
+              Invite sent — awaiting setup
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={handleSend}
+            disabled={sending}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-700 transition hover:bg-indigo-100 disabled:opacity-50"
+          >
+            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" />
+            </svg>
+            {sending ? "Sending…" : label[status]}
+          </button>
+        </>
+      )}
+      {error && <p className="text-xs text-red-600">{error}</p>}
+    </div>
+  );
+}
+
 // ─── Tenant section ───────────────────────────────────────────────────────────
 
 function TenantSection({
@@ -251,13 +343,21 @@ function TenantSection({
   }
 
   const action = !editing ? (
-    <button
-      type="button"
-      onClick={() => setEditing(true)}
-      className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
-    >
-      {tenant ? "Edit" : "Add"}
-    </button>
+    <div className="flex items-center gap-2">
+      {tenant?.id && (
+        <TenantInviteButton
+          propertyTenantId={tenant.id}
+          tenantEmail={tenant.lead_tenant_email}
+        />
+      )}
+      <button
+        type="button"
+        onClick={() => setEditing(true)}
+        className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+      >
+        {tenant ? "Edit" : "Add"}
+      </button>
+    </div>
   ) : (
     <div className="flex items-center gap-2">
       <button

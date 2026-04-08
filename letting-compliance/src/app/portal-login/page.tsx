@@ -13,6 +13,23 @@ export default function TenantLoginPage() {
   const [password, setPassword] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
+
+  async function handleForgotPassword() {
+    if (!email) {
+      setErrorMessage("Enter your email address above, then click Forgot password.");
+      return;
+    }
+    setResetLoading(true);
+    setErrorMessage("");
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? window.location.origin;
+    const redirectTo = `${appUrl}/auth/callback?next=${encodeURIComponent("/portal/reset-password")}`;
+    await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+    // Always show success to avoid user enumeration
+    setResetSent(true);
+    setResetLoading(false);
+  }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -81,6 +98,14 @@ export default function TenantLoginPage() {
               <label htmlFor="password" className="block text-sm font-medium text-slate-700">
                 Password
               </label>
+              <button
+                type="button"
+                onClick={handleForgotPassword}
+                disabled={resetLoading}
+                className="text-xs font-medium text-indigo-600 hover:text-indigo-500 disabled:opacity-50"
+              >
+                {resetLoading ? "Sending…" : "Forgot password?"}
+              </button>
             </div>
             <input
               id="password"
@@ -109,11 +134,14 @@ export default function TenantLoginPage() {
           </button>
         </form>
 
-        <p className="mt-6 text-center text-sm text-slate-500">
-          Don&apos;t have an account?{" "}
-          <Link href="/signup" className="font-medium text-indigo-600 hover:text-indigo-500">
-            Create one
-          </Link>
+        {resetSent && (
+          <div className="mt-5 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+            If that email is registered, you&apos;ll receive a reset link shortly.
+          </div>
+        )}
+
+        <p className="mt-5 text-center text-xs text-slate-400">
+          Access is by invite from your letting agent.
         </p>
       </div>
 
