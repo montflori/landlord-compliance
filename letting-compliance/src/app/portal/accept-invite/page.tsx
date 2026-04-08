@@ -1,7 +1,5 @@
 "use client";
 
-export const dynamic = "force-dynamic";
-
 /**
  * /portal/accept-invite
  *
@@ -19,7 +17,7 @@ export const dynamic = "force-dynamic";
  */
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
@@ -30,7 +28,7 @@ type Stage =
   | "done"         // success, redirecting
   | "error";       // unrecoverable error
 
-export default function AcceptInvitePage() {
+function AcceptInviteInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const token = searchParams.get("token");
@@ -236,5 +234,13 @@ export default function AcceptInvitePage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function AcceptInvitePage() {
+  return (
+    <Suspense>
+      <AcceptInviteInner />
+    </Suspense>
   );
 }
