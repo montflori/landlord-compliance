@@ -8,13 +8,21 @@
  * POST /api/tenant-invite
  *   Body: { propertyTenantId: string }
  *   Sends (or resends) a portal invite to the tenant email on the tenancy.
- *   - If a pending invite already exists: expires it, creates a fresh one.
- *   - If no pending invite: creates one.
- *   All within a single logical sequence (no cross-row transaction needed
- *   because the unique partial index rejects duplicate pending rows at the
- *   DB level; we expire first then insert).
  *
- * Token security:
+ *   Two paths depending on whether the tenant already has a linked auth account:
+ *
+ *   A) auth_user_id IS NULL (not yet linked):
+ *      - Tries type:'invite' to create the auth user.
+ *      - Falls back to type:'magiclink' if the email is already registered.
+ *      - Both redirect to /portal/accept-invite which writes auth_user_id.
+ *      - An invite row is inserted so the token can be validated.
+ *
+ *   B) auth_user_id IS SET (already linked):
+ *      - Sends a type:'recovery' link → /portal/reset-password.
+ *      - No invite row is inserted (auth_user_id is already correct).
+ *      - Old pending invite rows are still expired for cleanliness.
+ *
+ * Token security (path A only):
  *   Raw token (32 random bytes, hex) is sent in the email URL.
  *   SHA-256 hash is stored in tenant_invites.token_hash.
  *   The DB never holds the recoverable token.
@@ -127,6 +135,7 @@ async function postHandler(request: NextRequest, tag: string): Promise<Response>
       id,
       lead_tenant_name,
       lead_tenant_email,
+      auth_user_id,
       property_id,
       properties (
         address_line_1,
@@ -143,7 +152,7 @@ async function postHandler(request: NextRequest, tag: string): Promise<Response>
     console.error(`${tag} step1 tenancy lookup failed: propertyTenantId=${propertyTenantId} error=${tenancyError?.message ?? "no row"}`);
     return NextResponse.json({ error: "Tenancy not found" }, { status: 404 });
   }
-  console.log(`${tag} step1 tenancy found: property_id=${tenancy.property_id}`);
+  console.log(`${tag} step1 tenancy found: property_id=${tenancy.property_id} hasAuthUserId=${!!(tenancy as any).auth_user_id}`);
 
   const prop = Array.isArray(tenancy.properties) ? tenancy.properties[0] : tenancy.properties;
   const landlord = prop
@@ -169,23 +178,6 @@ async function postHandler(request: NextRequest, tag: string): Promise<Response>
   }
   console.log(`${tag} step2 tenant email present`);
 
-  // If an accepted invite exists, the tenant already has portal access
-  const { data: existingAccepted } = await admin
-    .from("tenant_invites")
-    .select("id")
-    .eq("property_tenant_id", propertyTenantId)
-    .eq("status", "accepted")
-    .limit(1)
-    .maybeSingle();
-
-  if (existingAccepted) {
-    console.log(`${tag} step2 invite already accepted id=${existingAccepted.id}`);
-    return NextResponse.json(
-      { error: "This tenant has already accepted their invite and has portal access." },
-      { status: 409 }
-    );
-  }
-
   // ── Step 3: Expire any existing pending invite ───────────────────────────────
   const { error: expireError, count: expireCount } = await admin
     .from("tenant_invites")
@@ -202,64 +194,8 @@ async function postHandler(request: NextRequest, tag: string): Promise<Response>
   }
   console.log(`${tag} step3 expired ${expireCount ?? 0} pending invite(s)`);
 
-  // ── Step 4: Generate Supabase invite magic link ───────────────────────────────
-  const rawToken = randomBytes(32).toString("hex");
-  const tokenHash = hashToken(rawToken);
-  const acceptPath = `/portal/accept-invite?token=${rawToken}`;
-  const redirectTo = buildAppUrl(
-    `/auth/callback?next=${encodeURIComponent(acceptPath)}`
-  );
-
-  // ── Step 4: Generate Supabase link ───────────────────────────────────────────
-  // Try 'invite' first (creates the auth user if they don't exist).
-  // If the user already exists, Supabase rejects 'invite' — fall back to
-  // 'magiclink' so the existing user gets a one-time sign-in link that
-  // still flows through /auth/callback → /portal/accept-invite.
-  console.log(`${tag} step4 calling generateLink(invite) for email=<redacted> redirectTo=${redirectTo}`);
-  let { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
-    type: "invite",
-    email: tenantEmail,
-    options: { redirectTo },
-  });
-
-  if (linkError && /already registered/i.test(linkError.message ?? "")) {
-    console.log(`${tag} step4 user already exists — falling back to magiclink`);
-    ({ data: linkData, error: linkError } = await admin.auth.admin.generateLink({
-      type: "magiclink",
-      email: tenantEmail,
-      options: { redirectTo },
-    }));
-  }
-
-  if (linkError || !linkData?.properties?.action_link) {
-    console.error(`${tag} step4 generateLink failed: ${linkError?.message ?? "no action_link in response"}`);
-    console.error(`${tag} step4 generateLink full error:`, JSON.stringify(linkError ?? {}));
-    return NextResponse.json(
-      { error: `Failed to generate invite link: ${linkError?.message ?? "no action_link returned"}` },
-      { status: 500 }
-    );
-  }
-  console.log(`${tag} step4 generateLink succeeded`);
-
-  // ── Step 5: Persist the invite row ───────────────────────────────────────────
-  const { error: insertError } = await admin.from("tenant_invites").insert({
-    property_tenant_id: propertyTenantId,
-    email: tenantEmail,
-    token_hash: tokenHash,
-    invited_by_user_id: user.id,
-    // expires_at uses the DB default: now() + interval '7 days'
-  });
-
-  if (insertError) {
-    console.error(`${tag} step5 insert tenant_invites failed: ${insertError.message} code=${insertError.code}`);
-    return NextResponse.json(
-      { error: `Failed to record invite: ${insertError.message}` },
-      { status: 500 }
-    );
-  }
-  console.log(`${tag} step5 tenant_invites row inserted`);
-
-  // ── Step 6: Send email ────────────────────────────────────────────────────────
+  // ── Step 4: Branch on whether the tenant's auth account is already linked ────
+  const authUserId = (tenancy as any).auth_user_id as string | null;
   const address = [
     (prop as any).address_line_1,
     (prop as any).address_line_2,
@@ -269,7 +205,110 @@ async function postHandler(request: NextRequest, tag: string): Promise<Response>
     .filter(Boolean)
     .join(", ");
 
-  console.log(`${tag} step6 sending invite email to=<redacted>`);
+  if (authUserId) {
+    // Path B: tenant already has a linked account — send a password-reset link
+    // so they can regain access without disturbing their account or any data.
+    console.log(`${tag} step4 tenant already linked — sending recovery link`);
+
+    const recoveryRedirectTo = buildAppUrl(
+      `/auth/callback?next=${encodeURIComponent("/portal/reset-password")}`
+    );
+
+    const { data: recoveryData, error: recoveryError } = await admin.auth.admin.generateLink({
+      type: "recovery",
+      email: tenantEmail,
+      options: { redirectTo: recoveryRedirectTo },
+    });
+
+    if (recoveryError || !recoveryData?.properties?.action_link) {
+      console.error(`${tag} step4 recovery generateLink failed: ${recoveryError?.message ?? "no action_link"}`);
+      return NextResponse.json(
+        { error: `Failed to generate recovery link: ${recoveryError?.message ?? "no action_link returned"}` },
+        { status: 500 }
+      );
+    }
+    console.log(`${tag} step4 recovery link generated`);
+
+    console.log(`${tag} step5 sending recovery email to=<redacted>`);
+    try {
+      await sendTenantInviteEmail({
+        to: tenantEmail,
+        tenantName: tenancy.lead_tenant_name,
+        propertyAddress: address,
+        agentName: landlord.full_name ?? "Your letting agent",
+        actionLink: recoveryData.properties.action_link,
+      });
+    } catch (emailError) {
+      const msg = emailError instanceof Error ? emailError.message : String(emailError);
+      console.error(`${tag} step5 recovery email send failed: ${msg}`);
+      return NextResponse.json(
+        { error: `Recovery email failed to send: ${msg}. Please resend.` },
+        { status: 500 }
+      );
+    }
+    console.log(`${tag} step5 recovery email sent`);
+    return NextResponse.json({ success: true });
+  }
+
+  // Path A: tenant does not yet have a linked auth account
+  // ── Step 4A: Generate invite or magic link ───────────────────────────────────
+  const rawToken = randomBytes(32).toString("hex");
+  const tokenHash = hashToken(rawToken);
+  const acceptPath = `/portal/accept-invite?token=${rawToken}`;
+  const redirectTo = buildAppUrl(
+    `/auth/callback?next=${encodeURIComponent(acceptPath)}`
+  );
+
+  // Try 'invite' first (creates the auth user if they don't exist).
+  // If the user already exists, Supabase rejects 'invite' — fall back to
+  // 'magiclink' so the existing user gets a one-time sign-in link that
+  // still flows through /auth/callback → /portal/accept-invite.
+  console.log(`${tag} step4A calling generateLink(invite) for email=<redacted> redirectTo=${redirectTo}`);
+  let { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
+    type: "invite",
+    email: tenantEmail,
+    options: { redirectTo },
+  });
+
+  if (linkError && /already registered/i.test(linkError.message ?? "")) {
+    console.log(`${tag} step4A user already exists in auth — falling back to magiclink`);
+    ({ data: linkData, error: linkError } = await admin.auth.admin.generateLink({
+      type: "magiclink",
+      email: tenantEmail,
+      options: { redirectTo },
+    }));
+  }
+
+  if (linkError || !linkData?.properties?.action_link) {
+    console.error(`${tag} step4A generateLink failed: ${linkError?.message ?? "no action_link in response"}`);
+    console.error(`${tag} step4A generateLink full error:`, JSON.stringify(linkError ?? {}));
+    return NextResponse.json(
+      { error: `Failed to generate invite link: ${linkError?.message ?? "no action_link returned"}` },
+      { status: 500 }
+    );
+  }
+  console.log(`${tag} step4A generateLink succeeded`);
+
+  // ── Step 5A: Persist the invite row ─────────────────────────────────────────
+  const { error: insertError } = await admin.from("tenant_invites").insert({
+    property_tenant_id: propertyTenantId,
+    email: tenantEmail,
+    token_hash: tokenHash,
+    invited_by_user_id: user.id,
+    // expires_at uses the DB default: now() + interval '7 days'
+  });
+
+  if (insertError) {
+    console.error(`${tag} step5A insert tenant_invites failed: ${insertError.message} code=${insertError.code}`);
+    return NextResponse.json(
+      { error: `Failed to record invite: ${insertError.message}` },
+      { status: 500 }
+    );
+  }
+  console.log(`${tag} step5A tenant_invites row inserted`);
+
+  // ── Step 6A: Send invite email ───────────────────────────────────────────────
+  console.log(`${tag} step6A sending invite email to=<redacted>`);
   try {
     await sendTenantInviteEmail({
       to: tenantEmail,
@@ -281,13 +320,13 @@ async function postHandler(request: NextRequest, tag: string): Promise<Response>
   } catch (emailError) {
     // Invite row was inserted — log failure but let agent resend.
     const msg = emailError instanceof Error ? emailError.message : String(emailError);
-    console.error(`${tag} step6 email send failed: ${msg}`);
+    console.error(`${tag} step6A email send failed: ${msg}`);
     return NextResponse.json(
       { error: `Invite created but email failed to send: ${msg}. Please resend.` },
       { status: 500 }
     );
   }
-  console.log(`${tag} step6 invite email sent`);
+  console.log(`${tag} step6A invite email sent`);
 
   return NextResponse.json({ success: true });
 }
