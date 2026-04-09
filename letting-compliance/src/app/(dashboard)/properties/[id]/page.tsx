@@ -847,11 +847,13 @@ function DocumentRequestsSection({
     setTenantId(tenant?.id ?? null);
     if (!tenant) { setLoading(false); return; }
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("tenant_document_requests")
-      .select("*, tenant_documents(file_name, file_path)")
+      // Hint the FK so PostgREST resolves the join unambiguously.
+      .select("*, tenant_documents!uploaded_document_id(file_name, file_path)")
       .eq("property_id", propertyId)
       .order("created_at", { ascending: false });
+    if (error) console.error("[DocumentRequestsSection] fetch error:", error.message);
     setRequests((data ?? []) as DocumentRequest[]);
     setLoading(false);
   }

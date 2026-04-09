@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { TENANT_UPLOADS_BUCKET } from "@/lib/constants";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -103,7 +104,7 @@ function UploadPanel({
     setProgress(40);
 
     const { error: uploadError } = await supabase.storage
-      .from("tenant-uploads")
+      .from(TENANT_UPLOADS_BUCKET)
       .upload(filePath, file, { contentType: file.type, upsert: false });
 
     if (uploadError) {
@@ -126,7 +127,10 @@ function UploadPanel({
         file_path: filePath,
         file_size_bytes: file.size,
         mime_type: file.type || null,
-        document_request_id: request?.id ?? null,
+        // document_request_id intentionally omitted: that column on tenant_documents
+        // is a FK to the legacy document_requests table, not tenant_document_requests.
+        // The request↔upload link is maintained via tenant_document_requests.uploaded_document_id,
+        // set by the /api/document-requests/[id]/fulfill route.
       })
       .select("id")
       .single();
@@ -135,7 +139,7 @@ function UploadPanel({
 
     if (dbError) {
       // Roll back storage upload if DB insert failed
-      await supabase.storage.from("tenant-uploads").remove([filePath]);
+      await supabase.storage.from(TENANT_UPLOADS_BUCKET).remove([filePath]);
       setError(dbError.message);
       setUploading(false);
       setProgress(0);
@@ -306,7 +310,7 @@ function DeleteModal({
     setError("");
 
     // Remove from storage
-    await supabase.storage.from("tenant-uploads").remove([doc.file_path]);
+    await supabase.storage.from(TENANT_UPLOADS_BUCKET).remove([doc.file_path]);
 
     // Delete DB record
     const { error: dbError } = await supabase
@@ -451,7 +455,7 @@ export default function TenantDocumentsPage() {
 
   async function handleDownload(doc: TenantDocument) {
     const { data, error } = await supabase.storage
-      .from("tenant-uploads")
+      .from(TENANT_UPLOADS_BUCKET)
       .createSignedUrl(doc.file_path, 60);
     if (error || !data) return;
     window.open(data.signedUrl, "_blank");

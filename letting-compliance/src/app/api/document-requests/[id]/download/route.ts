@@ -13,8 +13,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { TENANT_UPLOADS_BUCKET } from "@/lib/constants";
 
-const BUCKET = "tenant-uploads";
+const BUCKET = TENANT_UPLOADS_BUCKET;
 
 export async function GET(
   _request: NextRequest,

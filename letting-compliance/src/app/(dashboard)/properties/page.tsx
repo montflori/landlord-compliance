@@ -46,6 +46,21 @@ type PropertyDocument = {
 
 type Toast = { type: "success" | "error"; message: string };
 
+type DocumentRequest = {
+  id: string;
+  property_tenant_id: string;
+  document_type: string;
+  title: string;
+  description: string | null;
+  is_required: boolean;
+  due_date: string | null;
+  status: "requested" | "uploaded" | "approved" | "rejected";
+  rejection_reason: string | null;
+  uploaded_document_id: string | null;
+  created_at: string;
+  tenant_documents: { file_name: string; file_path: string } | null;
+};
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const PROPERTY_TYPES = [
@@ -745,6 +760,399 @@ function DocumentCard({ propertyId, docType, label, description, existing, onUpl
   );
 }
 
+// ─── Document requests section ────────────────────────────────────────────────
+
+const REQUEST_STATUS: Record<DocumentRequest["status"], { label: string; cls: string }> = {
+  requested: { label: "Requested",       cls: "bg-slate-100 text-slate-600 ring-slate-500/20" },
+  uploaded:  { label: "Awaiting review", cls: "bg-amber-50 text-amber-700 ring-amber-600/20" },
+  approved:  { label: "Approved",        cls: "bg-emerald-50 text-emerald-700 ring-emerald-600/20" },
+  rejected:  { label: "Rejected",        cls: "bg-red-50 text-red-700 ring-red-600/20" },
+};
+
+function DocumentRequestsSection({
+  propertyId,
+  onToast,
+}: {
+  propertyId: string;
+  onToast: (t: Toast) => void;
+}) {
+  const [tenantId, setTenantId] = useState<string | null | undefined>(undefined);
+  const [requests, setRequests] = useState<DocumentRequest[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showCreate, setShowCreate] = useState(false);
+  const [reviewing, setReviewing] = useState<DocumentRequest | null>(null);
+  const [rejectMode, setRejectMode] = useState(false);
+  const [rejectionReason, setRejectionReason] = useState("");
+  const [reviewLoading, setReviewLoading] = useState(false);
+  const [createForm, setCreateForm] = useState({
+    document_type: "",
+    title: "",
+    description: "",
+    is_required: false,
+    due_date: "",
+  });
+  const [creating, setCreating] = useState(false);
+
+  useEffect(() => { loadAll(); }, [propertyId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function loadAll() {
+    const supabase = createClient();
+    const { data: tenant } = await supabase
+      .from("property_tenants")
+      .select("id")
+      .eq("property_id", propertyId)
+      .maybeSingle();
+    setTenantId(tenant?.id ?? null);
+    if (!tenant) { setLoading(false); return; }
+
+    const { data, error } = await supabase
+      .from("tenant_document_requests")
+      // Hint the FK so PostgREST resolves the join unambiguously.
+      .select("*, tenant_documents!uploaded_document_id(file_name, file_path)")
+      .eq("property_id", propertyId)
+      .order("created_at", { ascending: false });
+    if (error) console.error("[DocumentRequestsSection] fetch error:", error.message);
+    setRequests((data ?? []) as DocumentRequest[]);
+    setLoading(false);
+  }
+
+  function patchCreate(p: Partial<typeof createForm>) {
+    setCreateForm((prev) => ({ ...prev, ...p }));
+  }
+
+  async function handleCreate(e: React.FormEvent) {
+    e.preventDefault();
+    if (!tenantId) return;
+    setCreating(true);
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    const { error } = await supabase.from("tenant_document_requests").insert({
+      property_tenant_id: tenantId,
+      property_id: propertyId,
+      requested_by_user_id: user?.id,
+      document_type: createForm.document_type.trim(),
+      title: createForm.title.trim(),
+      description: createForm.description.trim() || null,
+      is_required: createForm.is_required,
+      due_date: createForm.due_date || null,
+    });
+    setCreating(false);
+    if (error) { onToast({ type: "error", message: error.message }); return; }
+    setShowCreate(false);
+    setCreateForm({ document_type: "", title: "", description: "", is_required: false, due_date: "" });
+    onToast({ type: "success", message: "Document request created." });
+    loadAll();
+  }
+
+  async function handleApprove() {
+    if (!reviewing) return;
+    setReviewLoading(true);
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("tenant_document_requests")
+      .update({ status: "approved" })
+      .eq("id", reviewing.id);
+    setReviewLoading(false);
+    if (error) { onToast({ type: "error", message: error.message }); return; }
+    setReviewing(null);
+    onToast({ type: "success", message: "Document approved." });
+    loadAll();
+  }
+
+  async function handleReject() {
+    if (!reviewing || !rejectionReason.trim()) return;
+    setReviewLoading(true);
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("tenant_document_requests")
+      .update({ status: "rejected", rejection_reason: rejectionReason.trim() })
+      .eq("id", reviewing.id);
+    setReviewLoading(false);
+    if (error) { onToast({ type: "error", message: error.message }); return; }
+    setReviewing(null);
+    setRejectionReason("");
+    setRejectMode(false);
+    onToast({ type: "success", message: "Document rejected." });
+    loadAll();
+  }
+
+  async function handleViewDocument(req: DocumentRequest) {
+    const res = await fetch(`/api/document-requests/${req.id}/download`);
+    if (!res.ok) { onToast({ type: "error", message: "Could not generate download link." }); return; }
+    const { url } = await res.json();
+    window.open(url, "_blank");
+  }
+
+  const createAction = tenantId ? (
+    <button
+      type="button"
+      onClick={() => setShowCreate(true)}
+      className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+    >
+      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+      </svg>
+      Request document
+    </button>
+  ) : undefined;
+
+  return (
+    <>
+      <SectionCard title="Document requests" action={createAction}>
+        {loading ? (
+          <p className="text-sm text-gray-400">Loading…</p>
+        ) : tenantId === null ? (
+          <p className="text-sm text-gray-400">
+            Add tenant information above to start requesting documents.
+          </p>
+        ) : requests.length === 0 ? (
+          <p className="text-sm text-gray-400">No document requests yet.</p>
+        ) : (
+          <div className="divide-y divide-gray-100">
+            {requests.map((req) => {
+              const badge = REQUEST_STATUS[req.status];
+              return (
+                <div key={req.id} className="flex items-start justify-between gap-4 py-3.5 first:pt-0 last:pb-0">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-sm font-medium text-gray-900">{req.title}</p>
+                      {req.is_required && (
+                        <span className="inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-600 ring-1 ring-inset ring-red-500/20">
+                          Required
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-0.5 text-xs text-gray-500">
+                      {req.document_type}
+                      {req.due_date ? ` · Due ${formatDate(req.due_date)}` : ""}
+                    </p>
+                    {req.status === "rejected" && req.rejection_reason && (
+                      <p className="mt-1 text-xs text-red-600">
+                        Rejection reason: {req.rejection_reason}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${badge.cls}`}>
+                      {badge.label}
+                    </span>
+                    {req.status === "uploaded" && (
+                      <button
+                        type="button"
+                        onClick={() => { setReviewing(req); setRejectMode(false); setRejectionReason(""); }}
+                        className="rounded-lg border border-gray-200 px-3 py-1 text-xs font-medium text-gray-700 transition hover:bg-gray-50"
+                      >
+                        Review
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </SectionCard>
+
+      {/* ── Create request slide-over ──────────────────────────────────────── */}
+      {showCreate && (
+        <>
+          <div
+            className="fixed inset-0 z-30 bg-black/30 backdrop-blur-sm"
+            onClick={() => setShowCreate(false)}
+            aria-hidden="true"
+          />
+          <div className="fixed inset-y-0 right-0 z-40 flex w-full max-w-md flex-col bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
+              <h2 className="text-base font-semibold text-gray-900">Request a document</h2>
+              <button
+                onClick={() => setShowCreate(false)}
+                className="rounded-lg p-1.5 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600"
+                aria-label="Close"
+              >
+                <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                  <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
+                </svg>
+              </button>
+            </div>
+            <form onSubmit={handleCreate} className="flex flex-1 flex-col overflow-y-auto">
+              <div className="flex-1 space-y-5 px-5 py-5">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Document type <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={createForm.document_type}
+                    onChange={(e) => patchCreate({ document_type: e.target.value })}
+                    placeholder="e.g. Passport, Proof of income, Employment letter"
+                    className={inputClass}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Title <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={createForm.title}
+                    onChange={(e) => patchCreate({ title: e.target.value })}
+                    placeholder="e.g. Photo ID (passport or driving licence)"
+                    className={inputClass}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Instructions{" "}
+                    <span className="font-normal text-gray-400">(optional)</span>
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={createForm.description}
+                    onChange={(e) => patchCreate({ description: e.target.value })}
+                    placeholder="Any additional guidance for the tenant…"
+                    className={inputClass}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Due date{" "}
+                    <span className="font-normal text-gray-400">(optional)</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={createForm.due_date}
+                    onChange={(e) => patchCreate({ due_date: e.target.value })}
+                    className={inputClass}
+                  />
+                </div>
+                <div className="flex items-center gap-3">
+                  <input
+                    id="is-required-p"
+                    type="checkbox"
+                    checked={createForm.is_required}
+                    onChange={(e) => patchCreate({ is_required: e.target.checked })}
+                    className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <label htmlFor="is-required-p" className="text-sm font-medium text-gray-700">
+                    Mark as required
+                  </label>
+                </div>
+              </div>
+              <div className="flex gap-3 border-t border-gray-200 px-5 py-4">
+                <button
+                  type="button"
+                  onClick={() => setShowCreate(false)}
+                  className="flex-1 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={creating}
+                  className="flex-1 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 disabled:opacity-60"
+                >
+                  {creating ? "Creating…" : "Create request"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </>
+      )}
+
+      {/* ── Review modal ───────────────────────────────────────────────────── */}
+      {reviewing && (
+        <>
+          <div
+            className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm"
+            onClick={() => { setReviewing(null); setRejectMode(false); }}
+            aria-hidden="true"
+          />
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-6 shadow-xl">
+              <h3 className="text-base font-semibold text-gray-900">Review uploaded document</h3>
+              <p className="mt-0.5 text-sm text-gray-500">{reviewing.title}</p>
+
+              {reviewing.tenant_documents ? (
+                <button
+                  type="button"
+                  onClick={() => handleViewDocument(reviewing)}
+                  className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-indigo-600 hover:text-indigo-500"
+                >
+                  <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M12.232 4.232a2.5 2.5 0 0 1 3.536 3.536l-1.225 1.224a.75.75 0 0 0 1.061 1.06l1.224-1.224a4 4 0 0 0-5.656-5.656l-3 3a4 4 0 0 0 .225 5.865.75.75 0 0 0 .977-1.138 2.5 2.5 0 0 1-.142-3.667l3-3Z" />
+                    <path d="M11.603 7.963a.75.75 0 0 0-.977 1.138 2.5 2.5 0 0 1 .142 3.667l-3 3a2.5 2.5 0 0 1-3.536-3.536l1.225-1.224a.75.75 0 0 0-1.061-1.06l-1.224 1.224a4 4 0 1 0 5.656 5.656l3-3a4 4 0 0 0-.225-5.865Z" />
+                  </svg>
+                  {reviewing.tenant_documents.file_name}
+                </button>
+              ) : (
+                <p className="mt-4 text-sm text-gray-400">No file attached.</p>
+              )}
+
+              {!rejectMode ? (
+                <div className="mt-5 flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => { setReviewing(null); setRejectMode(false); }}
+                    className="flex-1 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRejectMode(true)}
+                    disabled={reviewLoading}
+                    className="flex-1 rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-700 transition hover:bg-red-100 disabled:opacity-60"
+                  >
+                    Reject
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleApprove}
+                    disabled={reviewLoading}
+                    className="flex-1 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:opacity-60"
+                  >
+                    {reviewLoading ? "…" : "Approve"}
+                  </button>
+                </div>
+              ) : (
+                <div className="mt-4 space-y-3">
+                  <textarea
+                    rows={3}
+                    placeholder="Reason for rejection…"
+                    value={rejectionReason}
+                    onChange={(e) => setRejectionReason(e.target.value)}
+                    className={inputClass}
+                    autoFocus
+                  />
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setRejectMode(false)}
+                      className="flex-1 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+                    >
+                      Back
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleReject}
+                      disabled={reviewLoading || !rejectionReason.trim()}
+                      className="flex-1 rounded-lg bg-red-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-red-500 disabled:opacity-60"
+                    >
+                      {reviewLoading ? "Rejecting…" : "Confirm reject"}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
 // ─── Documents section ────────────────────────────────────────────────────────
 
 function DocumentsSection({ propertyId, onToast }: { propertyId: string; onToast: (t: Toast) => void }) {
@@ -988,6 +1396,7 @@ export default function PropertiesPage() {
 
           <PropertyDetailsSection property={selectedProperty} />
           <TenantSection propertyId={selectedProperty.id} onToast={setToast} onSaved={() => refreshPropertyStatus(selectedProperty.id)} />
+          <DocumentRequestsSection propertyId={selectedProperty.id} onToast={setToast} />
           <DocumentsSection propertyId={selectedProperty.id} onToast={setToast} />
         </div>
       )}

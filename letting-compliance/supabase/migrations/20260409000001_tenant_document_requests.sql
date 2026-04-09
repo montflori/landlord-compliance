@@ -1,15 +1,14 @@
 -- Creates tenant_document_requests table.
 --
 -- Status flow:
---   requested → uploaded (tenant uploads a file)
---              → approved (agent approves the upload)
---              → rejected (agent rejects, with reason)
---   requested → cancelled (agent cancels the request — future use)
+--   requested  → uploaded  (tenant uploads a file against this request)
+--              → approved  (agent approves the upload)
+--              → rejected  (agent rejects, with a reason; tenant may re-upload)
 --
--- Relationship to tenant_documents:
---   When a tenant fulfils a request, the uploaded tenant_documents row is
---   linked via uploaded_document_id. The tenant_documents.document_request_id
---   column (added in 20260408000000) links in the other direction.
+-- The link from a request to the fulfilling document is:
+--   tenant_document_requests.uploaded_document_id → tenant_documents.id
+-- (The reverse FK tenant_documents.document_request_id → document_requests.id
+--  is a separate legacy column from the v2 migration and is unrelated.)
 
 CREATE TABLE IF NOT EXISTS tenant_document_requests (
   id                   uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -30,7 +29,6 @@ CREATE TABLE IF NOT EXISTS tenant_document_requests (
 
 CREATE INDEX IF NOT EXISTS tdr_property_tenant_id_idx ON tenant_document_requests(property_tenant_id);
 CREATE INDEX IF NOT EXISTS tdr_property_id_idx        ON tenant_document_requests(property_id);
--- Partial index for active requests (most queries filter on these statuses)
 CREATE INDEX IF NOT EXISTS tdr_active_status_idx      ON tenant_document_requests(property_id, status)
   WHERE status IN ('requested', 'uploaded');
 
