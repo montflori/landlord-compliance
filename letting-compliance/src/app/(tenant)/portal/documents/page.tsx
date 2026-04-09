@@ -127,10 +127,9 @@ function UploadPanel({
         file_path: filePath,
         file_size_bytes: file.size,
         mime_type: file.type || null,
-        // document_request_id intentionally omitted: that column on tenant_documents
-        // is a FK to the legacy document_requests table, not tenant_document_requests.
-        // The request↔upload link is maintained via tenant_document_requests.uploaded_document_id,
-        // set by the /api/document-requests/[id]/fulfill route.
+        // Links this upload to the tenant_document_requests row.
+        // The fulfill route also sets tenant_document_requests.uploaded_document_id.
+        document_request_id: request?.id ?? null,
       })
       .select("id")
       .single();

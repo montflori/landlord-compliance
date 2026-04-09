@@ -58,7 +58,6 @@ type DocumentRequest = {
   rejection_reason: string | null;
   uploaded_document_id: string | null;
   created_at: string;
-  tenant_documents: { file_name: string; file_path: string } | null;
 };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -807,11 +806,13 @@ function DocumentRequestsSection({
 
     const { data, error } = await supabase
       .from("tenant_document_requests")
-      // Hint the FK so PostgREST resolves the join unambiguously.
-      .select("*, tenant_documents!uploaded_document_id(file_name, file_path)")
+      .select("*")
       .eq("property_id", propertyId)
       .order("created_at", { ascending: false });
-    if (error) console.error("[DocumentRequestsSection] fetch error:", error.message);
+    if (error) {
+      console.error("[DocumentRequestsSection] fetch error:", error.message);
+      onToast({ type: "error", message: `Failed to load document requests: ${error.message}` });
+    }
     setRequests((data ?? []) as DocumentRequest[]);
     setLoading(false);
   }
@@ -1074,7 +1075,7 @@ function DocumentRequestsSection({
               <h3 className="text-base font-semibold text-gray-900">Review uploaded document</h3>
               <p className="mt-0.5 text-sm text-gray-500">{reviewing.title}</p>
 
-              {reviewing.tenant_documents ? (
+              {reviewing.uploaded_document_id ? (
                 <button
                   type="button"
                   onClick={() => handleViewDocument(reviewing)}
@@ -1084,7 +1085,7 @@ function DocumentRequestsSection({
                     <path d="M12.232 4.232a2.5 2.5 0 0 1 3.536 3.536l-1.225 1.224a.75.75 0 0 0 1.061 1.06l1.224-1.224a4 4 0 0 0-5.656-5.656l-3 3a4 4 0 0 0 .225 5.865.75.75 0 0 0 .977-1.138 2.5 2.5 0 0 1-.142-3.667l3-3Z" />
                     <path d="M11.603 7.963a.75.75 0 0 0-.977 1.138 2.5 2.5 0 0 1 .142 3.667l-3 3a2.5 2.5 0 0 1-3.536-3.536l1.225-1.224a.75.75 0 0 0-1.061-1.06l-1.224 1.224a4 4 0 1 0 5.656 5.656l3-3a4 4 0 0 0-.225-5.865Z" />
                   </svg>
-                  {reviewing.tenant_documents.file_name}
+                  View uploaded file
                 </button>
               ) : (
                 <p className="mt-4 text-sm text-gray-400">No file attached.</p>
