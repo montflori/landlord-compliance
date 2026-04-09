@@ -15,6 +15,17 @@ type TenantDocument = {
   uploaded_at: string;
 };
 
+type DocumentRequest = {
+  id: string;
+  document_type: string;
+  title: string;
+  description: string | null;
+  is_required: boolean;
+  due_date: string | null;
+  status: "requested" | "uploaded" | "approved" | "rejected";
+  rejection_reason: string | null;
+};
+
 type TenancyInfo = {
   id: string;
   property_id: string;
@@ -52,15 +63,17 @@ function UploadPanel({
   tenancy,
   onClose,
   onUploaded,
+  request,
 }: {
   tenancy: TenancyInfo;
   onClose: () => void;
   onUploaded: () => void;
+  request?: DocumentRequest;
 }) {
   const supabase = createClient();
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const [title, setTitle] = useState("");
+  const [title, setTitle] = useState(request?.title ?? "");
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
@@ -102,16 +115,21 @@ function UploadPanel({
     setProgress(75);
 
     // Insert DB record
-    const { error: dbError } = await supabase.from("tenant_documents").insert({
-      property_tenant_id: tenancy.id,
-      property_id: tenancy.property_id,
-      uploaded_by_user_id: user.id,
-      title: title.trim(),
-      file_name: file.name,
-      file_path: filePath,
-      file_size_bytes: file.size,
-      mime_type: file.type || null,
-    });
+    const { data: insertedDoc, error: dbError } = await supabase
+      .from("tenant_documents")
+      .insert({
+        property_tenant_id: tenancy.id,
+        property_id: tenancy.property_id,
+        uploaded_by_user_id: user.id,
+        title: title.trim(),
+        file_name: file.name,
+        file_path: filePath,
+        file_size_bytes: file.size,
+        mime_type: file.type || null,
+        document_request_id: request?.id ?? null,
+      })
+      .select("id")
+      .single();
 
     setProgress(100);
 
@@ -122,6 +140,16 @@ function UploadPanel({
       setUploading(false);
       setProgress(0);
       return;
+    }
+
+    // If this upload is fulfilling a document request, mark it as uploaded.
+    if (request?.id && insertedDoc?.id) {
+      await fetch(`/api/document-requests/${request.id}/fulfill`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ documentId: insertedDoc.id }),
+      });
+      // Non-fatal if this fails — the document is uploaded regardless.
     }
 
     setUploading(false);
@@ -142,7 +170,9 @@ function UploadPanel({
       <div className="fixed inset-y-0 right-0 z-40 flex w-full max-w-md flex-col bg-white shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
-          <h2 className="text-base font-semibold text-slate-900">Upload document</h2>
+          <h2 className="text-base font-semibold text-slate-900">
+            {request ? `Upload: ${request.title}` : "Upload document"}
+          </h2>
           <button
             onClick={onClose}
             className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
@@ -328,9 +358,11 @@ export default function TenantDocumentsPage() {
 
   const [tenancy, setTenancy] = useState<TenancyInfo | null>(null);
   const [docs, setDocs] = useState<TenantDocument[]>([]);
+  const [requests, setRequests] = useState<DocumentRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState("");
   const [showUpload, setShowUpload] = useState(false);
+  const [activeRequest, setActiveRequest] = useState<DocumentRequest | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<TenantDocument | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -381,16 +413,24 @@ export default function TenantDocumentsPage() {
 
       if (!cancelled) setTenancy(tenancyData);
 
-      // Documents
-      const { data: docsData, error: docsError } = await supabase
-        .from("tenant_documents")
-        .select("id, title, file_name, file_path, file_size_bytes, mime_type, uploaded_at")
-        .eq("property_tenant_id", tenancyData.id)
-        .order("uploaded_at", { ascending: false });
+      // Requests + documents in parallel
+      const [docsResult, requestsResult] = await Promise.all([
+        supabase
+          .from("tenant_documents")
+          .select("id, title, file_name, file_path, file_size_bytes, mime_type, uploaded_at")
+          .eq("property_tenant_id", tenancyData.id)
+          .order("uploaded_at", { ascending: false }),
+        supabase
+          .from("tenant_document_requests")
+          .select("id, document_type, title, description, is_required, due_date, status, rejection_reason")
+          .eq("property_tenant_id", tenancyData.id)
+          .order("created_at", { ascending: true }),
+      ]);
 
       if (!cancelled) {
-        if (docsError) setFetchError(docsError.message);
-        else setDocs(docsData ?? []);
+        if (docsResult.error) setFetchError(docsResult.error.message);
+        else setDocs(docsResult.data ?? []);
+        setRequests((requestsResult.data ?? []) as DocumentRequest[]);
         setLoading(false);
       }
     }
@@ -451,8 +491,9 @@ export default function TenantDocumentsPage() {
       {showUpload && tenancy && (
         <UploadPanel
           tenancy={tenancy}
-          onClose={() => setShowUpload(false)}
+          onClose={() => { setShowUpload(false); setActiveRequest(null); }}
           onUploaded={handleUploaded}
+          request={activeRequest ?? undefined}
         />
       )}
       {deleteTarget && (
@@ -472,7 +513,7 @@ export default function TenantDocumentsPage() {
           </p>
         </div>
         <button
-          onClick={() => setShowUpload(true)}
+          onClick={() => { setActiveRequest(null); setShowUpload(true); }}
           disabled={!tenancy}
           className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
         >
@@ -483,6 +524,91 @@ export default function TenantDocumentsPage() {
           <span className="sm:hidden">Upload</span>
         </button>
       </div>
+
+      {/* ── Document requests ─────────────────────────────────────────────────── */}
+      {!loading && requests.length > 0 && (
+        <div className="mb-6">
+          <h2 className="mb-3 text-sm font-semibold text-slate-700">Requested documents</h2>
+          <div className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+            {requests.map((req) => {
+              const isPending   = req.status === "requested";
+              const isUploaded  = req.status === "uploaded";
+              const isApproved  = req.status === "approved";
+              const isRejected  = req.status === "rejected";
+              return (
+                <div key={req.id} className="flex items-start justify-between gap-4 px-4 py-3.5">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-sm font-medium text-slate-900">{req.title}</p>
+                      {req.is_required && (
+                        <span className="inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-600 ring-1 ring-inset ring-red-500/20">
+                          Required
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-0.5 text-xs text-slate-400">
+                      {req.document_type}
+                      {req.due_date
+                        ? ` · Due ${new Date(req.due_date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`
+                        : ""}
+                    </p>
+                    {req.description && (
+                      <p className="mt-1 text-xs text-slate-500">{req.description}</p>
+                    )}
+                    {isRejected && req.rejection_reason && (
+                      <p className="mt-1 text-xs text-red-600">
+                        Rejected: {req.rejection_reason}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    {isPending && (
+                      <button
+                        type="button"
+                        onClick={() => { setActiveRequest(req); setShowUpload(true); }}
+                        disabled={!tenancy}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-indigo-500 disabled:opacity-50"
+                      >
+                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
+                        </svg>
+                        Upload
+                      </button>
+                    )}
+                    {isRejected && (
+                      <button
+                        type="button"
+                        onClick={() => { setActiveRequest(req); setShowUpload(true); }}
+                        disabled={!tenancy}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 transition hover:bg-red-100 disabled:opacity-50"
+                      >
+                        Re-upload
+                      </button>
+                    )}
+                    {isUploaded && (
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700 ring-1 ring-inset ring-amber-600/20">
+                        <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+                        Under review
+                      </span>
+                    )}
+                    {isApproved && (
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700 ring-1 ring-inset ring-emerald-600/20">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                        Approved
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── My documents ─────────────────────────────────────────────────────── */}
+      {!loading && (docs.length > 0 || requests.length === 0) && (
+        <h2 className="mb-3 text-sm font-semibold text-slate-700">My documents</h2>
+      )}
 
       {/* ── Content ───────────────────────────────────────────────────────────── */}
       {loading ? (
