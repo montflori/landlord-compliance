@@ -85,14 +85,14 @@ export async function POST(
   // ── 6. Verify the document was uploaded by this user ─────────────────────────
   const { data: doc } = await admin
     .from("tenant_documents")
-    .select("id, uploaded_by_user_id")
+    .select("id, uploaded_by")
     .eq("id", documentId)
     .single();
 
   if (!doc) {
     return NextResponse.json({ error: "Document not found" }, { status: 404 });
   }
-  if (doc.uploaded_by_user_id !== user.id) {
+  if (doc.uploaded_by !== user.id) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

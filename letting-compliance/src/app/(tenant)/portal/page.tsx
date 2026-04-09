@@ -147,7 +147,7 @@ export default async function TenantDashboardPage() {
   const { count: docCount } = await admin
     .from("tenant_documents")
     .select("id", { count: "exact", head: true })
-    .eq("property_tenant_id", tenancy.id);
+    .eq("tenant_id", tenancy.id);
 
   const addressLine = [
     property?.address_line_1,

@@ -13,7 +13,7 @@ type TenantDocument = {
   file_path: string;
   file_size_bytes: number | null;
   mime_type: string | null;
-  uploaded_at: string;
+  created_at: string;
 };
 
 type DocumentRequest = {
@@ -119,9 +119,9 @@ function UploadPanel({
     const { data: insertedDoc, error: dbError } = await supabase
       .from("tenant_documents")
       .insert({
-        property_tenant_id: tenancy.id,
+        tenant_id: tenancy.id,
         property_id: tenancy.property_id,
-        uploaded_by_user_id: user.id,
+        uploaded_by: user.id,
         title: title.trim(),
         file_name: file.name,
         file_path: filePath,
@@ -420,9 +420,9 @@ export default function TenantDocumentsPage() {
       const [docsResult, requestsResult] = await Promise.all([
         supabase
           .from("tenant_documents")
-          .select("id, title, file_name, file_path, file_size_bytes, mime_type, uploaded_at")
-          .eq("property_tenant_id", tenancyData.id)
-          .order("uploaded_at", { ascending: false }),
+          .select("id, title, file_name, file_path, file_size_bytes, mime_type, created_at")
+          .eq("tenant_id", tenancyData.id)
+          .order("created_at", { ascending: false }),
         supabase
           .from("tenant_document_requests")
           .select("id, document_type, title, description, is_required, due_date, status, rejection_reason")
@@ -668,7 +668,7 @@ export default function TenantDocumentsPage() {
                   {doc.file_name}
                   {doc.file_size_bytes ? ` · ${formatBytes(doc.file_size_bytes)}` : ""}
                   {" · "}
-                  {formatDate(doc.uploaded_at)}
+                  {formatDate(doc.created_at)}
                 </p>
               </div>
 
