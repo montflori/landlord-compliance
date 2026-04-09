@@ -115,22 +115,28 @@ function UploadPanel({
     }
     setProgress(75);
 
-    // Insert DB record
+    // Build insert payload — only include document_request_id when we have a
+    // valid request id. Omitting the key entirely (rather than passing null)
+    // avoids FK / NOT NULL violations for ad-hoc uploads.
+    const docPayload: Record<string, unknown> = {
+      tenant_id: tenancy.id,
+      property_id: tenancy.property_id,
+      uploaded_by: user.id,
+      title: title.trim(),
+      file_name: file.name,
+      file_path: filePath,
+      file_size_bytes: file.size,
+      mime_type: file.type || null,
+    };
+    // Only set document_request_id when the request id is a non-empty string.
+    // The FK on tenant_documents.document_request_id references tenant_document_requests.
+    if (request?.id && typeof request.id === "string" && request.id.length > 0) {
+      docPayload.document_request_id = request.id;
+    }
+
     const { data: insertedDoc, error: dbError } = await supabase
       .from("tenant_documents")
-      .insert({
-        tenant_id: tenancy.id,
-        property_id: tenancy.property_id,
-        uploaded_by: user.id,
-        title: title.trim(),
-        file_name: file.name,
-        file_path: filePath,
-        file_size_bytes: file.size,
-        mime_type: file.type || null,
-        // Links this upload to the tenant_document_requests row.
-        // The fulfill route also sets tenant_document_requests.uploaded_document_id.
-        document_request_id: request?.id ?? null,
-      })
+      .insert(docPayload)
       .select("id")
       .single();
 
